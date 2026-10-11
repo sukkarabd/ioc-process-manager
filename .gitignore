@@ -1,6 +1,6 @@
-   __pycache__/
-   *.pyc
-   .venv/
-   projects/
-   static/
-   results.json
+__pycache__/
+*.pyc
+.venv/
+projects/
+static/
+results.json
