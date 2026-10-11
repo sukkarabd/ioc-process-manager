@@ -1,0 +1,1584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>IoC Process Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js" crossorigin></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090f;--s1:#0d1017;--s2:#131720;--s3:#181e2a;
+  --b1:#1c2235;--b2:#232c40;--b3:#2d3a52;
+  --t1:#dde4f0;--t2:#8fa0bc;--t3:#526078;
+  --cyan:#00c9c9;--cyan2:rgba(0,201,201,.13);--cyan3:rgba(0,201,201,.06);
+  --green:#22c55e;--green2:rgba(34,197,94,.13);
+  --amber:#f59e0b;--amber2:rgba(245,158,11,.13);
+  --red:#ef4444;--red2:rgba(239,68,68,.13);
+  --blue:#3b82f6;--blue2:rgba(59,130,246,.13);
+  --purple:#a78bfa;--purple2:rgba(167,139,250,.13);
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'DM Sans',sans-serif;
+  --r:6px;--r2:10px;--r3:14px;
+}
+html,body,#root{height:100%;background:var(--bg)}
+body{color:var(--t1);font-family:var(--sans);font-size:13px;line-height:1.5;overflow:hidden}
+/* Layout */
+.app{display:flex;height:100vh}
+.sidebar{width:210px;min-width:210px;background:var(--s1);border-right:1px solid var(--b1);display:flex;flex-direction:column}
+.logo{padding:18px 16px 14px;border-bottom:1px solid var(--b1)}
+.logo-title{font-size:15px;font-weight:700;color:var(--cyan);letter-spacing:-.02em}
+.logo-sub{font-size:10px;color:var(--t3);margin-top:2px;font-family:var(--mono)}
+.nav{flex:1;padding:10px 8px;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--r);cursor:pointer;font-size:13px;font-weight:500;color:var(--t2);transition:all .12s;margin-bottom:1px;border:1px solid transparent;user-select:none}
+.nav-item:hover{background:var(--s2);color:var(--t1)}
+.nav-item.active{background:var(--cyan2);color:var(--cyan);border-color:rgba(0,201,201,.2)}
+.nav-icon{font-size:14px;width:16px;text-align:center;flex-shrink:0}
+.nav-proj{font-size:11px;color:var(--t3);padding:14px 10px 6px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.sidebar-foot{padding:12px 14px;border-top:1px solid var(--b1);font-size:10px;color:var(--t3);font-family:var(--mono)}
+.sidebar-foot a{color:var(--cyan);text-decoration:none}
+/* Main */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.topbar{height:48px;min-height:48px;background:var(--s1);border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-title{font-size:14px;font-weight:600;color:var(--t1);white-space:nowrap}
+.topbar-proj{font-size:11px;color:var(--cyan);background:var(--cyan2);padding:2px 8px;border-radius:20px;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.live{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t3)}
+.live-dot{width:6px;height:6px;background:var(--green);border-radius:50%;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.content{flex:1;overflow-y:auto;padding:20px}
+/* Cards */
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r3);overflow:hidden;margin-bottom:14px}
+.card-head{padding:12px 16px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:12px;font-weight:600;color:var(--t1);display:flex;align-items:center;gap:7px}
+.card-body{padding:16px}
+/* Grid */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+/* Stats */
+.stat{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r3);padding:16px}
+.stat-lbl{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.stat-val{font-size:26px;font-weight:700;line-height:1;color:var(--t1);font-family:var(--mono)}
+.stat-sub{font-size:11px;color:var(--t3);margin-top:3px}
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;font-family:var(--mono)}
+.b-finished{background:var(--green2);color:var(--green)}
+.b-started{background:var(--amber2);color:var(--amber)}
+.b-planned{background:var(--b1);color:var(--t3)}
+.b-ready{background:var(--cyan2);color:var(--cyan)}
+.b-paused{background:var(--purple2);color:var(--purple)}
+.b-cancelled{background:var(--red2);color:var(--red)}
+/* Progress */
+.pbar{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--t3);font-family:var(--mono)}
+.ptrack{flex:1;height:4px;background:var(--b1);border-radius:4px;overflow:hidden;min-width:40px}
+.pfill{height:100%;border-radius:4px;transition:width .3s}
+/* Table */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;padding:7px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);border-bottom:1px solid var(--b1);font-weight:600}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--b1);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr.clickable{cursor:pointer;transition:background .1s}
+.tbl tr.clickable:hover td{background:var(--s2)}
+.tbl .plabel{font-weight:600;color:var(--t1);font-size:12px}
+.tbl .pid{font-size:10px;color:var(--t3);font-family:var(--mono)}
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:all .12s;font-family:var(--sans)}
+.btn-p{background:var(--cyan);color:#000;border-color:var(--cyan)}
+.btn-p:hover{opacity:.85}
+.btn-g{background:transparent;color:var(--t2);border-color:var(--b2)}
+.btn-g:hover{background:var(--s2);color:var(--t1)}
+.btn-r{background:var(--red2);color:var(--red);border-color:rgba(239,68,68,.2)}
+.btn-r:hover{background:var(--red);color:#fff}
+.btn-sm{padding:4px 9px;font-size:11px}
+.btn-xs{padding:2px 7px;font-size:10px}
+/* Forms */
+.form-group{margin-bottom:12px}
+.form-label{font-size:11px;font-weight:600;color:var(--t2);margin-bottom:5px;display:block}
+.form-input,.form-select,.form-textarea{width:100%;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);padding:7px 10px;color:var(--t1);font-size:12px;font-family:var(--sans);outline:none;transition:border-color .15s}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--cyan)}
+.form-textarea{resize:vertical;font-family:var(--mono);font-size:11px;min-height:80px}
+.form-select option{background:var(--s2)}
+/* Modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.modal{background:var(--s1);border:1px solid var(--b2);border-radius:var(--r3);width:500px;max-height:85vh;overflow-y:auto;padding:24px;animation:pop .18s ease}
+@keyframes pop{from{transform:scale(.95);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:16px;color:var(--t1)}
+/* Side panel */
+.panel-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:150;backdrop-filter:blur(2px)}
+.side-panel{position:fixed;right:0;top:0;bottom:0;width:460px;background:var(--s1);border-left:1px solid var(--b2);overflow-y:auto;padding:20px;z-index:151;animation:slide .18s ease}
+@keyframes slide{from{transform:translateX(30px);opacity:0}to{transform:translateX(0);opacity:1}}
+.sp-title{font-size:15px;font-weight:700;margin-bottom:4px}
+.sp-section{margin-bottom:18px}
+.sp-head{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:8px;font-weight:600;display:flex;align-items:center;gap:6px}
+.sp-head::after{content:'';flex:1;height:1px;background:var(--b1)}
+.sp-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--b1);font-size:11px}
+.sp-row:last-child{border:none}
+.sp-key{color:var(--t3)}
+.sp-val{color:var(--t1);font-weight:500;text-align:right;max-width:240px;word-break:break-word}
+/* Status pills */
+.pills{display:flex;flex-wrap:wrap;gap:5px}
+.pill{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--b2);background:var(--s2);color:var(--t3);transition:all .12s}
+.pill:hover{border-color:var(--cyan);color:var(--t1)}
+.pill.on{border-color:var(--cyan);background:var(--cyan2);color:var(--cyan)}
+/* Chip */
+.chip{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--t3);background:var(--s2);border:1px solid var(--b1);border-radius:4px;padding:1px 6px;font-family:var(--mono)}
+.chip .kw{color:var(--cyan)}
+/* Loading */
+.loading{display:flex;align-items:center;justify-content:center;height:180px;color:var(--t3);gap:9px}
+.spin{width:16px;height:16px;border:2px solid var(--b2);border-top-color:var(--cyan);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.err{background:var(--red2);border:1px solid rgba(239,68,68,.2);border-radius:var(--r);padding:10px 14px;color:var(--red);font-size:12px;margin-bottom:12px}
+/* Scrollbar */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--b2);border-radius:4px}
+/* SPARQL */
+.qlist{display:flex;flex-direction:column;gap:5px;overflow-y:auto;max-height:calc(100vh - 160px)}
+.qitem{padding:9px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);cursor:pointer;transition:border-color .12s}
+.qitem:hover{border-color:var(--cyan)}
+.qitem.active{border-color:var(--cyan);background:var(--cyan3)}
+.qitem-title{font-size:12px;font-weight:600;color:var(--t1)}
+.qitem-cat{font-size:10px;color:var(--t3);font-family:var(--mono)}
+.qeditor{background:var(--bg);border:1px solid var(--b2);border-radius:var(--r);padding:12px;font-family:var(--mono);font-size:11px;color:var(--t1);width:100%;resize:vertical;outline:none;min-height:160px;line-height:1.7}
+.qeditor:focus{border-color:var(--cyan)}
+.qtable{width:100%;border-collapse:collapse;font-size:11px;font-family:var(--mono)}
+.qtable th{padding:6px 10px;background:var(--s2);color:var(--cyan);font-size:10px;text-align:left;border-bottom:1px solid var(--b2)}
+.qtable td{padding:6px 10px;border-bottom:1px solid var(--b1);color:var(--t1);word-break:break-all}
+.qtable tr:last-child td{border:none}
+/* Gantt */
+.gantt-wrap{overflow-x:auto;overflow-y:auto}
+.gantt-row{display:flex;align-items:center;height:34px;border-bottom:1px solid var(--b1)}
+.gantt-row:hover{background:var(--s2)}
+.gantt-label{width:220px;min-width:220px;padding:0 10px;font-size:11px;display:flex;flex-direction:column;justify-content:center;flex-shrink:0;border-right:1px solid var(--b1)}
+.gantt-bar-area{flex:1;position:relative;height:100%;overflow:hidden}
+.gantt-bar{position:absolute;height:20px;top:7px;border-radius:4px;display:flex;align-items:center;padding:0 6px;font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;cursor:pointer;transition:filter .15s}
+.gantt-bar:hover{filter:brightness(1.2)}
+.gantt-header{display:flex;align-items:center;height:28px;background:var(--s2);border-bottom:1px solid var(--b2)}
+.gantt-hlabel{width:220px;min-width:220px;padding:0 10px;font-size:10px;color:var(--t3);font-weight:600;border-right:1px solid var(--b1);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0}
+.gantt-dates{flex:1;display:flex;position:relative;overflow:hidden}
+.gantt-date-tick{position:absolute;font-size:9px;color:var(--t3);font-family:var(--mono);white-space:nowrap}
+.gantt-gridline{position:absolute;top:0;bottom:0;width:1px;background:var(--b1)}
+/* Ontology Browser */
+.ont-layout{display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100vh - 130px);border:1px solid var(--b1);border-radius:var(--r3);overflow:hidden;background:var(--s1)}
+.ont-tree{border-right:1px solid var(--b1);overflow-y:auto;background:var(--bg);padding:8px 0}
+.ont-tree-hdr{padding:8px 14px 6px;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);font-weight:700;font-family:var(--mono)}
+.ont-tree-item{display:flex;align-items:center;gap:7px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:500;color:var(--t2);transition:background .1s;border-left:2px solid transparent;user-select:none}
+.ont-tree-item:hover{background:var(--s2);color:var(--t1)}
+.ont-tree-item.active{background:var(--cyan2);color:var(--cyan);border-left-color:var(--cyan)}
+.ont-tree-item.child{padding-left:32px}
+.ont-tree-item.grandchild{padding-left:48px}
+.ont-tree-icon{font-size:13px;width:16px;flex-shrink:0;text-align:center}
+.ont-tree-count{margin-left:auto;font-size:10px;font-family:var(--mono);background:var(--b1);padding:1px 6px;border-radius:10px;color:var(--t3)}
+.ont-tree-item.active .ont-tree-count{background:rgba(0,201,201,.2);color:var(--cyan)}
+.ont-detail{overflow-y:auto;padding:24px}
+.ont-detail-icon{width:48px;height:48px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:12px;flex-shrink:0}
+.ont-detail-name{font-size:22px;font-weight:800;letter-spacing:-.02em;font-family:var(--mono)}
+.ont-detail-uri{font-size:11px;color:var(--t3);margin-top:3px;font-family:var(--mono)}
+.ont-detail-sub{font-size:11px;color:var(--cyan);margin-top:2px;font-family:var(--mono)}
+.ont-detail-desc{font-size:13px;color:var(--t2);margin:14px 0;line-height:1.6;padding:12px 14px;background:var(--s2);border-radius:var(--r);border-left:3px solid var(--cyan)}
+.ont-section-hdr{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);font-weight:700;margin:18px 0 8px;display:flex;align-items:center;gap:8px}
+.ont-section-hdr::after{content:'';flex:1;height:1px;background:var(--b1)}
+.ont-prop-row{display:grid;grid-template-columns:180px 130px 1fr;gap:10px;padding:8px 10px;border-bottom:1px solid var(--b1);font-size:11px;align-items:start}
+.ont-prop-row:last-child{border:none}
+.ont-prop-row:hover{background:var(--s2)}
+.ont-prop-name{font-family:var(--mono);font-weight:600;color:var(--blue)}
+.ont-prop-range{font-family:var(--mono);font-size:10px}
+.ont-prop-range.xsd{color:var(--amber)}
+.ont-prop-range.ioc{color:var(--cyan)}
+.ont-prop-desc{color:var(--t3);line-height:1.4}
+.ont-instance{display:inline-flex;align-items:center;gap:6px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);padding:6px 10px;font-size:11px;cursor:pointer;transition:border-color .12s;font-family:var(--mono)}
+.ont-instance:hover{border-color:var(--cyan);color:var(--cyan)}
+.ont-instances-grid{display:flex;flex-wrap:wrap;gap:7px}
+.ont-prop-tbl{width:100%;border-collapse:collapse;background:var(--bg);border-radius:var(--r);overflow:hidden}
+.ont-prop-tbl th{padding:7px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);font-weight:600;background:var(--s2);text-align:left}
+.ont-empty{color:var(--t3);font-size:12px;padding:10px 0;font-style:italic}
+/* RDF */
+.rdf-pre{background:var(--bg);border:1px solid var(--b1);border-radius:var(--r);padding:16px;font-family:var(--mono);font-size:11px;line-height:1.8;overflow:auto;max-height:500px;white-space:pre}
+.rdf-kw{color:var(--cyan)}.rdf-uri{color:var(--blue)}.rdf-str{color:var(--green)}.rdf-bool{color:var(--amber)}.rdf-cmt{color:var(--t3);font-style:italic}
+/* Import panel */
+.drop-zone{border:2px dashed var(--b2);border-radius:var(--r2);padding:28px;text-align:center;color:var(--t3);transition:all .15s;cursor:pointer}
+.drop-zone:hover,.drop-zone.over{border-color:var(--cyan);background:var(--cyan3);color:var(--cyan)}
+/* Tag */
+.tag{display:inline-flex;align-items:center;gap:3px;background:var(--s2);border:1px solid var(--b1);border-radius:4px;padding:1px 7px;font-size:10px;color:var(--t3);font-family:var(--mono)}
+.tag .hi{color:var(--cyan)}
+/* No data */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:160px;color:var(--t3);gap:8px;font-size:13px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useCallback,useRef,useMemo}=React;
+const API_BASE=location.protocol.startsWith('http')?'':'http://localhost:8000';
+const API=p=>`${API_BASE}${p}`;
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+function useFetch(url,deps=[]){
+  const [data,setData]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState(null);
+  const go=useCallback(()=>{
+    if(!url){setLoading(false);return}
+    setLoading(true);setError(null);
+    fetch(url).then(r=>r.json()).then(d=>{setData(d);setLoading(false)}).catch(e=>{setError(e.message);setLoading(false)});
+  },[url,...deps]);
+  useEffect(()=>{go()},[go]);
+  return {data,loading,error,refetch:go};
+}
+
+const ST_CLR={Finished:'var(--green)',Started:'var(--amber)',Planned:'var(--t3)',Ready:'var(--cyan)',Paused:'var(--purple)',Cancelled:'var(--red)'};
+const ST_ICN={Finished:'✓',Started:'●',Planned:'○',Ready:'◎',Paused:'‖',Cancelled:'✗'};
+
+function Badge({status}){
+  if(!status)return null;
+  const l=status.label||'Unknown';
+  return <span className={`badge b-${l.toLowerCase()}`}>{ST_ICN[l]||'?'} {l}</span>;
+}
+
+function Pbar({pct,color}){
+  const c=color||(pct===100?'var(--green)':pct>0?'var(--amber)':'var(--b2)');
+  return <div className="pbar"><div className="ptrack"><div className="pfill" style={{width:`${pct}%`,background:c}}/></div><span>{pct}%</span></div>;
+}
+
+function Chip({prop}){return <span className="chip"><span className="kw">ioc:</span>{prop}</span>}
+function Loading(){return <div className="loading"><div className="spin"/>Loading…</div>}
+
+function Tag({k,v}){return <span className="tag"><span className="hi">{k}:</span>{v}</span>}
+
+// ── Projects screen ────────────────────────────────────────────────────────
+function Projects({onOpen}){
+  const {data,loading,refetch}=useFetch(API('/api/projects'));
+  const [showNew,setShowNew]=useState(false);
+  const [showImport,setShowImport]=useState(false);
+  const [newName,setNewName]=useState('');
+  const [creating,setCreating]=useState(false);
+
+  async function createProject(){
+    if(!newName.trim())return;
+    setCreating(true);
+    const r=await fetch(API('/api/projects'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:newName.trim()})});
+    const d=await r.json();
+    setCreating(false);setShowNew(false);setNewName('');
+    refetch();onOpen(d.id,d.name);
+  }
+
+  async function deleteProject(id,name,e){
+    e.stopPropagation();
+    if(!confirm(`Delete "${name}"?`))return;
+    await fetch(API(`/api/projects/${id}`),{method:'DELETE'});
+    refetch();
+  }
+
+  if(loading)return <Loading/>;
+
+  return(
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
+        <div>
+          <div style={{fontFamily:'var(--mono)',fontSize:20,fontWeight:600,color:'var(--t1)',marginBottom:4}}>Projects</div>
+          <div style={{fontSize:12,color:'var(--t3)'}}>Each project is stored as a valid Turtle RDF file using ioc.owl v0.5.1</div>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button className="btn btn-g" onClick={()=>setShowImport(true)}>⬆ Import</button>
+          <button className="btn btn-p" onClick={()=>setShowNew(true)}>+ New Project</button>
+        </div>
+      </div>
+
+      {data?.projects?.length===0&&<div className="empty">No projects yet — create one or import a CSV</div>}
+
+      <div className="g3">
+        {data?.projects?.map(p=>(
+          <div key={p.id} className="card" style={{cursor:'pointer',transition:'border-color .15s'}}
+               onClick={()=>onOpen(p.id,p.name)}
+               onMouseEnter={e=>e.currentTarget.style.borderColor='var(--cyan)'}
+               onMouseLeave={e=>e.currentTarget.style.borderColor='var(--b1)'}>
+            <div className="card-body">
+              <div style={{fontWeight:700,fontSize:14,marginBottom:6,color:'var(--t1)'}}>{p.name}</div>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+                <Tag k="processes" v={p.processes}/>
+                <Tag k="size" v={`${p.size_kb}KB`}/>
+              </div>
+              <div style={{fontSize:10,color:'var(--t3)',marginBottom:10,fontFamily:'var(--mono)'}}>
+                {p.modified?`Modified ${p.modified.slice(0,10)}`:p.created?.slice(0,10)||''}
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <button className="btn btn-p btn-sm">Open →</button>
+                <button className="btn btn-r btn-xs" onClick={e=>deleteProject(p.id,p.name,e)}>Delete</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showNew&&(
+        <div className="overlay" onClick={()=>setShowNew(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-title">New Project</div>
+            <div className="form-group">
+              <label className="form-label">Project Name</label>
+              <input className="form-input" value={newName} onChange={e=>setNewName(e.target.value)}
+                     placeholder="e.g. Maple Grove Residence" onKeyDown={e=>e.key==='Enter'&&createProject()} autoFocus/>
+            </div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
+              <button className="btn btn-g" onClick={()=>setShowNew(false)}>Cancel</button>
+              <button className="btn btn-p" onClick={createProject} disabled={creating}>{creating?'Creating…':'Create Project'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImport&&<ImportModal onClose={()=>setShowImport(false)} onDone={(id,name)=>{refetch();onOpen(id,name)}}/>}
+    </div>
+  );
+}
+
+// ── Import Modal ───────────────────────────────────────────────────────────
+function ImportModal({onClose,onDone}){
+  const [name,setName]=useState('');
+  const [csvText,setCsvText]=useState('');
+  const [file,setFile]=useState(null);          // {name, b64}
+  const [loading,setLoading]=useState(false);
+  const [result,setResult]=useState(null);
+  const [error,setError]=useState('');
+
+  async function downloadTemplate(){
+    const r=await fetch(API('/api/template/csv'));
+    const t=await r.text();
+    const a=document.createElement('a');
+    a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(t);
+    a.download='ioc_template.csv';a.click();
+  }
+
+  function handleFile(f){
+    if(!f)return;
+    if(!name)setName(f.name.replace(/\.[^.]+$/,''));
+    setResult(null);setError('');
+    const r=new FileReader();
+    r.onload=e=>{
+      const bytes=new Uint8Array(e.target.result);let bin='';
+      for(let i=0;i<bytes.length;i+=0x8000)bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
+      setFile({name:f.name,b64:btoa(bin)});
+      if(/\.(csv|txt)$/i.test(f.name))setCsvText(new TextDecoder().decode(bytes));else setCsvText('');
+    };
+    r.readAsArrayBuffer(f);
+  }
+
+  async function doImport(){
+    if(!file&&!csvText.trim()){setError('Upload a file or paste CSV first');return}
+    setLoading(true);setError('');
+    const body=file
+      ?{name:name||'Imported Project',filename:file.name,data:file.b64}
+      :{name:name||'Imported Project',csv:csvText};
+    const r=await fetch(API(file?'/api/import/file':'/api/import/csv'),{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+    });
+    const d=await r.json();
+    setLoading(false);
+    if(d.error)setError(d.error);else setResult(d);
+  }
+
+  const rep=result?.report;
+  return(
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{width:600,maxHeight:'90vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">Import Project Schedule</div>
+        <div className="form-group">
+          <label className="form-label">Project Name</label>
+          <input className="form-input" value={name} onChange={e=>setName(e.target.value)} placeholder="My Project"/>
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <span style={{fontSize:11,color:'var(--t3)'}}>Supported: CSV · Excel (.xlsx) · MS Project XML (.xml)</span>
+          <button className="btn btn-g btn-xs" onClick={downloadTemplate}>⬇ CSV Template</button>
+        </div>
+        <div className="drop-zone" style={{marginBottom:10}}
+             onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add('over')}}
+             onDragLeave={e=>e.currentTarget.classList.remove('over')}
+             onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove('over');handleFile(e.dataTransfer.files[0])}}
+             onClick={()=>document.getElementById('imp-file-input').click()}>
+          {file?<span style={{color:'var(--cyan)'}}>📄 {file.name}</span>:'Drop a file here or click to browse'}
+          <input id="imp-file-input" type="file" accept=".csv,.txt,.xlsx,.xml" style={{display:'none'}}
+                 onChange={e=>handleFile(e.target.files[0])}/>
+        </div>
+        {!file&&<>
+          <textarea className="form-textarea" style={{minHeight:100,fontFamily:'var(--mono)',fontSize:10}}
+                    value={csvText} onChange={e=>setCsvText(e.target.value)}
+                    placeholder="…or paste CSV: process_id,name,method,actor,start_date,end_date,predecessors…"/>
+          <div style={{fontSize:10,color:'var(--t3)',marginTop:4}}>
+            Columns: process_id, name, method, actor, actor_org, start_date, end_date, predecessors, resources, input_materials, output_elements, space, status, progress, notes (lists separated by ; or ,)
+          </div>
+        </>}
+        {file&&<button className="btn btn-g btn-xs" onClick={()=>{setFile(null);setCsvText('');setResult(null)}}>✕ Remove file</button>}
+
+        {error&&<div className="err" style={{marginTop:10}}>{error}</div>}
+
+        {rep&&(
+          <div style={{marginTop:12,border:'1px solid var(--b2)',borderRadius:'var(--r)',padding:'10px 14px',fontSize:11}}>
+            <div style={{color:'var(--green)',fontWeight:600,marginBottom:6}}>
+              ✓ {result.processes} processes imported from <span style={{fontFamily:'var(--mono)'}}>{rep.format.toUpperCase()}</span>
+              {rep.counts?.summaryProcesses>0&&<> · {rep.counts.summaryProcesses} phases</>} · {rep.counts?.dependencies} dependencies
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'150px 1fr',gap:'3px 10px',color:'var(--t2)'}}>
+              <span>IoC fields filled</span><span style={{fontFamily:'var(--mono)'}}>{Math.round(rep.targetCoverage.ratio*100)}% ({rep.targetCoverage.covered.length}/{rep.targetCoverage.covered.length+rep.targetCoverage.missing.length})</span>
+              {rep.targetCoverage.missing.length>0&&<><span>Not in source</span><span style={{color:'var(--amber)'}}>{rep.targetCoverage.missing.join(', ')}</span></>}
+              {rep.unmappedSourceFields.length>0&&<><span>Source fields ignored</span><span style={{color:'var(--amber)'}}>{rep.unmappedSourceFields.join(', ')}</span></>}
+              <span>TBox check</span>
+              <span style={{color:rep.validation.conforms?'var(--green)':'var(--red)'}}>
+                {rep.validation.conforms?`✓ conforms to IoC ${rep.validation.tboxVersion}`:`✗ ${rep.validation.violations} violations`}
+              </span>
+            </div>
+            {rep.lostInformation?.map((l,i)=><div key={i} style={{marginTop:4,color:'var(--amber)'}}>⚠ {l}</div>)}
+            {rep.warnings?.length>0&&<div style={{marginTop:4,color:'var(--amber)'}}>{rep.warnings.length} warning(s): {rep.warnings.slice(0,3).join(' · ')}</div>}
+          </div>
+        )}
+
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
+          <button className="btn btn-g" onClick={onClose}>Cancel</button>
+          {result
+            ?<button className="btn btn-p" onClick={()=>onDone(result.id,result.name||name)}>Open Project →</button>
+            :<button className="btn btn-p" onClick={doImport} disabled={loading}>{loading?'Importing…':'Import'}</button>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Process Board ──────────────────────────────────────────────────────────
+function ProcessBoard({projId,projName,globalTick,onMutate}){
+  const {data,loading,refetch}=useFetch(API(`/api/projects/${projId}/processes`),[projId,globalTick]);
+  const [selected,setSelected]=useState(null);
+  const [showAdd,setShowAdd]=useState(false);
+  const [filter,setFilter]=useState('');
+
+  const procs=data?.processes||[];
+  const filtered=procs.filter(p=>
+    !filter||p.label.toLowerCase().includes(filter.toLowerCase())||
+    (p.actor?.label||'').toLowerCase().includes(filter.toLowerCase())||
+    p.status?.label?.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  const stats={
+    total:procs.length,
+    finished:procs.filter(p=>p.status?.isFinished).length,
+    started:procs.filter(p=>p.status?.isStarted&&!p.status?.isFinished).length,
+    blocked:procs.filter(p=>p.predecessors?.some(predId=>procs.find(x=>x.uri===predId&&!x.status?.isFinished))).length,
+  };
+  const pct=stats.total?Math.round(stats.finished/stats.total*100):0;
+
+  if(loading)return <Loading/>;
+
+  return(
+    <div>
+      <div className="g4" style={{marginBottom:16}}>
+        {[
+          {l:'Total',v:stats.total,c:'var(--t1)',s:'ioc:Process instances'},
+          {l:'Finished',v:stats.finished,c:'var(--green)',s:`${pct}% complete`},
+          {l:'In Progress',v:stats.started,c:'var(--amber)',s:'isStarted=true'},
+          {l:'Blocked',v:stats.blocked,c:'var(--red)',s:'predecessor unfinished'},
+        ].map(s=>(
+          <div className="stat" key={s.l}>
+            <div className="stat-lbl">{s.l}</div>
+            <div className="stat-val" style={{color:s.c}}>{s.v}</div>
+            <div className="stat-sub">{s.s}</div>
+            <div style={{marginTop:8}}><div className="ptrack" style={{height:3}}><div className="pfill" style={{width:`${s.l==='Finished'?pct:(s.v/stats.total*100)||0}%`,background:s.c}}/></div></div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <div className="card-title">⬡ Processes <Chip prop="Process"/></div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input className="form-input" style={{width:180}} placeholder="Filter…" value={filter} onChange={e=>setFilter(e.target.value)}/>
+            <button className="btn btn-p btn-sm" onClick={()=>setShowAdd(true)}>+ Add Process</button>
+          </div>
+        </div>
+        <table className="tbl">
+          <thead><tr>
+            <th>Process</th><th>Status</th><th>Actor</th><th>Method</th><th>Progress</th><th>Schedule</th>
+          </tr></thead>
+          <tbody>
+            {filtered.map(p=>(
+              <tr key={p.uri} className="clickable" onClick={()=>setSelected(p.id)}>
+                <td><div className="plabel">{p.label}</div><div className="pid">{p.id}</div></td>
+                <td><Badge status={p.status}/></td>
+                <td style={{fontSize:12}}>{p.actor?.label||<span style={{color:'var(--t3)'}}>—</span>}</td>
+                <td style={{fontSize:11,color:'var(--t2)',maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.method?.label||'—'}</td>
+                <td style={{minWidth:110}}><Pbar pct={p.progress}/></td>
+                <td style={{fontSize:10,color:'var(--t3)',fontFamily:'var(--mono)'}}>
+                  {p.schedule?.startedAtTime?p.schedule.startedAtTime.slice(0,10):'—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filtered.length===0&&<div className="empty">No processes match filter</div>}
+      </div>
+
+      {selected&&<ProcessPanel projId={projId} procId={selected} allProcs={procs}
+                               onClose={()=>setSelected(null)} onRefresh={refetch} onMutate={onMutate}/>}
+      {showAdd&&<AddProcessModal projId={projId} allProcs={procs}
+                                  onClose={()=>setShowAdd(false)} onDone={()=>{setShowAdd(false);refetch();onMutate&&onMutate()}}/>}
+    </div>
+  );
+}
+
+// ── Process Side Panel ─────────────────────────────────────────────────────
+function ProcessPanel({projId,procId,allProcs,onClose,onRefresh,onMutate}){
+  const {data,loading,refetch}=useFetch(API(`/api/projects/${projId}/processes/${procId}`),[projId,procId]);
+  const [updating,setUpdating]=useState(false);
+  const [deleting,setDeleting]=useState(false);
+
+  async function updateStatus(s){
+    setUpdating(true);
+    await fetch(API(`/api/projects/${projId}/processes/${procId}/status`),{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:s})
+    });
+    refetch();onRefresh();
+    onMutate&&onMutate();  // ← notify all other views
+    setUpdating(false);
+  }
+
+  async function deleteProc(){
+    if(!confirm(`Delete this process?`))return;
+    setDeleting(true);
+    await fetch(API(`/api/projects/${projId}/processes/${procId}`),{method:'DELETE'});
+    onMutate&&onMutate();  // ← notify all other views
+    onRefresh();onClose();
+  }
+
+  if(loading)return(
+    <><div className="panel-overlay" onClick={onClose}/>
+    <div className="side-panel"><Loading/></div></>
+  );
+
+  const p=data;
+  return(
+    <><div className="panel-overlay" onClick={onClose}/>
+    <div className="side-panel">
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+        <div>
+          <div className="sp-title">{p.label}</div>
+          <div style={{marginTop:5,display:'flex',gap:6,flexWrap:'wrap'}}>
+            <Badge status={p.status}/>
+            <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--t3)'}}>{p.id}</span>
+          </div>
+        </div>
+        <button className="btn btn-g btn-sm" onClick={onClose}>✕</button>
+      </div>
+
+      <div className="sp-section">
+        <div className="sp-head">Progress</div>
+        <Pbar pct={p.progress}/>
+      </div>
+
+      <div className="sp-section">
+        <div className="sp-head">Update ioc:Status</div>
+        <div className="pills">
+          {['planned','ready','started','finished','paused','cancelled'].map(s=>(
+            <div key={s} className={`pill ${p.status?.label?.toLowerCase()===s?'on':''}`}
+                 onClick={()=>!updating&&updateStatus(s)}>{s}</div>
+          ))}
+        </div>
+        {p.status&&(
+          <div style={{marginTop:8,display:'flex',flexWrap:'wrap',gap:8,fontSize:10,fontFamily:'var(--mono)'}}>
+            {['isReady','isStarted','isFinished','isPaused','isCancelled'].map(k=>(
+              <span key={k} style={{color:p.status[k]?'var(--cyan)':'var(--b3)'}}>{p.status[k]?'✓':'○'} {k}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <DelayImpact projId={projId} proc={p} onMutate={()=>{refetch();onRefresh();onMutate&&onMutate()}}/>
+
+      <StatusHistory projId={projId} procId={procId} tick={`${p.statusVersions}-${p.schedule?.versions}`}/>
+
+      {p.parent&&<div className="sp-section">
+        <div className="sp-head">ioc:hasParent</div>
+        <div className="sp-row"><span className="sp-key">phase</span><span className="sp-val">{p.parent.label}</span></div>
+      </div>}
+
+      {p.actor&&<div className="sp-section">
+        <div className="sp-head">ioc:Actor</div>
+        <div className="sp-row"><span className="sp-key">label</span><span className="sp-val">{p.actor.label}</span></div>
+        {p.actor.organisation&&<div className="sp-row"><span className="sp-key">vcard:hasOrganizationName</span><span className="sp-val">{p.actor.organisation}</span></div>}
+      </div>}
+
+      {p.method&&<div className="sp-section">
+        <div className="sp-head">ioc:Method</div>
+        <div className="sp-row"><span className="sp-key">label</span><span className="sp-val">{p.method.label}</span></div>
+      </div>}
+
+      {p.schedule&&<div className="sp-section">
+        <div className="sp-head">ioc:Schedule</div>
+        {p.schedule.startedAtTime&&<div className="sp-row"><span className="sp-key">prov:startedAtTime</span><span className="sp-val">{p.schedule.startedAtTime.slice(0,10)}</span></div>}
+        {p.schedule.endedAtTime&&<div className="sp-row"><span className="sp-key">prov:endedAtTime</span><span className="sp-val">{p.schedule.endedAtTime.slice(0,10)}</span></div>}
+        {p.schedule.hasDuration&&<div className="sp-row"><span className="sp-key">ioc:hasDuration</span><span className="sp-val">{p.schedule.hasDuration}</span></div>}
+        {p.schedule.slipDays>0&&<div className="sp-row"><span className="sp-key">slip vs. baseline</span><span className="sp-val" style={{color:'var(--red)'}}>+{p.schedule.slipDays} days (baseline end {p.schedule.baselineEnd})</span></div>}
+      </div>}
+
+      {p.resources?.length>0&&<div className="sp-section">
+        <div className="sp-head">ioc:Resource</div>
+        {p.resources.map(r=><div className="sp-row" key={r.uri}><span className="sp-key">label</span><span className="sp-val">{r.label}</span></div>)}
+      </div>}
+
+      {p.inputElements?.length>0&&<div className="sp-section">
+        <div className="sp-head">Input Elements (ioc:hasInputElement)</div>
+        {p.inputElements.map(e=><div className="sp-row" key={e.uri}><span className="sp-key">{e.type}</span><span className="sp-val">{e.label}</span></div>)}
+      </div>}
+
+      {p.outputElements?.length>0&&<div className="sp-section">
+        <div className="sp-head">Output Elements (ioc:hasOutputElement)</div>
+        {p.outputElements.map(e=><div className="sp-row" key={e.uri}><span className="sp-key">{e.type}</span><span className="sp-val">{e.label}</span></div>)}
+      </div>}
+
+      {(p.inputInformation?.length>0||p.outputInformation?.length>0)&&<div className="sp-section">
+        <div className="sp-head">ioc:Information</div>
+        {p.inputInformation?.map(i=><div className="sp-row" key={i.uri}><span className="sp-key">input</span><span className="sp-val">{i.label}</span></div>)}
+        {p.outputInformation?.map(i=><div className="sp-row" key={i.uri}><span className="sp-key">output</span><span className="sp-val">{i.label}</span></div>)}
+      </div>}
+
+      {(p.initialSpace||p.targetSpace)&&<div className="sp-section">
+        <div className="sp-head">ioc:Space</div>
+        {p.initialSpace&&<div className="sp-row"><span className="sp-key">hasInitialSpace</span><span className="sp-val">{p.initialSpace}</span></div>}
+        {p.targetSpace&&<div className="sp-row"><span className="sp-key">hasTargetSpace</span><span className="sp-val">{p.targetSpace}</span></div>}
+      </div>}
+
+      <div className="sp-section">
+        <div className="sp-head">ioc:hasPredecessor ({p.predecessorDetails?.length||0})</div>
+        {p.predecessorDetails?.length===0
+          ?<div style={{color:'var(--t3)',fontSize:11}}>None — root process</div>
+          :p.predecessorDetails?.map(x=>(
+            <div key={x.uri} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid var(--b1)',fontSize:11}}>
+              <span>{x.label}</span><Badge status={x.status}/>
+            </div>
+          ))
+        }
+      </div>
+
+      {p.successorDetails?.length>0&&<div className="sp-section">
+        <div className="sp-head">ioc:hasSuccessor ({p.successorDetails.length})</div>
+        {p.successorDetails.map(x=>(
+          <div key={x.uri} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid var(--b1)',fontSize:11}}>
+            <span>{x.label}</span><Badge status={x.status}/>
+          </div>
+        ))}
+      </div>}
+
+      <div style={{marginTop:20,paddingTop:14,borderTop:'1px solid var(--b1)'}}>
+        <button className="btn btn-r btn-sm" onClick={deleteProc} disabled={deleting}>{deleting?'Deleting…':'Delete Process'}</button>
+      </div>
+    </div></>
+  );
+}
+
+// ── Delay impact (what-if + re-plan) ───────────────────────────────────────
+function ImpactResult({r}){
+  if(!r)return null;
+  const pe=r.projectEnd;
+  return(
+    <div style={{marginTop:8,fontSize:11}}>
+      <div style={{padding:'8px 10px',borderRadius:'var(--r)',background:pe.shiftDays>0?'var(--red2)':'var(--amber2)',
+                   color:pe.shiftDays>0?'var(--red)':'var(--amber)',fontWeight:600,marginBottom:6}}>
+        {r.affectedCount} later process{r.affectedCount!==1?'es':''} shift · {r.actorsToInform.length} actor{r.actorsToInform.length!==1?'s':''} affected ·{' '}
+        {pe.shiftDays>0?`completion moves +${pe.shiftDays} d (${pe.old} → ${pe.new})`:'completion date unchanged'}
+        {r.absorbedByFloat.length>0&&<span style={{fontWeight:400}}> · {r.absorbedByFloat.length} absorbed by float</span>}
+      </div>
+      {r.affected.filter(a=>!a.source).map(a=>(
+        <div key={a.uri} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'3px 0',borderBottom:'1px solid var(--b1)'}}>
+          <span>{a.label}<span style={{color:'var(--t3)'}}> · {a.actor||'—'}</span></span>
+          <span style={{fontFamily:'var(--mono)',color:'var(--red)',whiteSpace:'nowrap'}}>+{a.shiftDays} d → {a.newEnd}</span>
+        </div>
+      ))}
+      {r.actorsToInform.length>0&&<div style={{marginTop:6,color:'var(--t2)'}}>
+        <b>Inform:</b> {r.actorsToInform.map(x=>`${x.actor}${x.organisation?` (${x.organisation})`:''} from ${x.firstAffectedStart}`).join(' · ')}
+      </div>}
+      <div style={{marginTop:4,fontSize:10,color:'var(--t3)'}}>{r.assumptions}</div>
+    </div>
+  );
+}
+
+function DelayImpact({projId,proc,onMutate}){
+  const [days,setDays]=useState(7);
+  const [res,setRes]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState('');
+  const done=proc.status?.isFinished||proc.status?.isCancelled;
+  useEffect(()=>{setRes(null);setErr('')},[proc.id]);
+  if(done||!proc.schedule)return null;
+  async function call(apply){
+    if(apply&&!confirm(`Re-plan: write new schedule versions for ${proc.label} and ${res?.affectedCount||0} later process(es)? The baseline is kept.`))return;
+    setBusy(true);setErr('');
+    const r=await fetch(API(`/api/projects/${projId}/impact${apply?'/apply':''}`),{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({process:proc.id,delayDays:Number(days),by:apply?'Site Manager':undefined})});
+    const d=await r.json();setBusy(false);
+    if(!r.ok){setErr(d.detail||'Failed');return}
+    setRes(d);
+    if(apply){setRes(null);onMutate&&onMutate()}
+  }
+  return(
+    <div className="sp-section">
+      <div className="sp-head">Delay impact</div>
+      <div style={{display:'flex',gap:6,alignItems:'center',fontSize:11,flexWrap:'wrap'}}>
+        If this finishes
+        <input className="form-input" type="number" min="1" value={days} onChange={e=>{setDays(e.target.value);setRes(null)}} style={{width:64,padding:'3px 6px'}}/>
+        days late:
+        <button className="btn btn-p btn-xs" onClick={()=>call(false)} disabled={busy||!(days>0)}>{busy?'…':'Show impact'}</button>
+        {res&&res.affectedCount>=0&&<button className="btn btn-r btn-xs" onClick={()=>call(true)} disabled={busy}>Apply re-plan</button>}
+      </div>
+      {err&&<div className="err" style={{marginTop:6}}>{err}</div>}
+      <ImpactResult r={res}/>
+    </div>
+  );
+}
+
+// ── Delay watch: late processes at a reference date and their knock-on effect ─
+function DelayWatch({projId,globalTick}){
+  const [ref,setRef]=useState('');
+  const url=API(`/api/projects/${projId}/delays${ref?`?date=${ref}`:''}`);
+  const {data,loading}=useFetch(url,[projId,globalTick,ref]);
+  if(loading&&!data)return <Loading/>;
+  if(!data)return null;
+  return(
+    <div>
+      <div style={{marginBottom:14,display:'flex',justifyContent:'space-between',alignItems:'flex-end',gap:12,flexWrap:'wrap'}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>Delay Watch</div>
+          <div style={{fontSize:11,color:'var(--t3)',maxWidth:640}}>
+            Processes that are late at the reference date, and how their delay propagates along <span style={{fontFamily:'var(--mono)'}}>ioc:hasPredecessor</span> to
+            later processes, the people responsible for them, and the completion date.
+          </div>
+        </div>
+        <label style={{fontSize:11,color:'var(--t2)',display:'flex',gap:6,alignItems:'center'}}>Reference date
+          <input className="form-input" type="date" value={ref||data.referenceDate} onChange={e=>setRef(e.target.value)} style={{width:150}}/>
+        </label>
+      </div>
+      <div className="stats" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:14}}>
+        {[{l:'Late now',v:data.late.length,c:'var(--amber)'},{l:'Knock-on processes',v:data.affectedCount,c:'var(--red)'},
+          {l:'Actors to inform',v:data.actorsToInform.length,c:'var(--blue)'},
+          {l:'Completion',v:data.projectEnd.shiftDays>0?`+${data.projectEnd.shiftDays} d`:'on time',c:data.projectEnd.shiftDays>0?'var(--red)':'var(--green)'}].map(s=>(
+          <div key={s.l} className="card" style={{padding:14,marginBottom:0}}>
+            <div className="stat-lbl">{s.l}</div><div className="stat-val" style={{color:s.c}}>{s.v}</div>
+          </div>))}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+        <div className="card"><div className="card-head"><div className="card-title">Late at {data.referenceDate}</div></div>
+          <div className="card-body" style={{fontSize:11}}>
+            {data.late.length===0?<div className="ont-empty">Nothing is late.</div>:data.late.map(x=>(
+              <div key={x.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'4px 0',borderBottom:'1px solid var(--b1)'}}>
+                <span>{x.label}<span style={{color:'var(--t3)'}}> · {x.actor||'—'} · {x.reason}</span></span>
+                <span style={{fontFamily:'var(--mono)',color:'var(--amber)',whiteSpace:'nowrap'}}>≥ {x.minDelayDays} d</span>
+              </div>))}
+          </div></div>
+        <div className="card"><div className="card-head"><div className="card-title">Knock-on effect</div></div>
+          <div className="card-body"><ImpactResult r={data}/></div></div>
+      </div>
+    </div>
+  );
+}
+
+// ── Status history (IoC ProcessDataState versioning) ───────────────────────
+function StatusHistory({projId,procId,tick}){
+  const {data}=useFetch(API(`/api/projects/${projId}/processes/${procId}/history`),[projId,procId,tick]);
+  const [open,setOpen]=useState(false);
+  if(!data?.versions)return null;
+  const v=data.versions, sv=data.scheduleVersions||[];
+  return(
+    <div className="sp-section">
+      <div className="sp-head" style={{cursor:'pointer'}} onClick={()=>setOpen(o=>!o)}>
+        History · {v.length} status state{v.length!==1?'s':''}{sv.length>1?` · ${sv.length} schedule states`:''} {open?'▾':'▸'}
+      </div>
+      {open&&v.map(s=>(
+        <div key={s.pds} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:'1px solid var(--b1)',fontSize:10,opacity:s.current?1:.65}}>
+          <span style={{fontFamily:'var(--mono)',color:'var(--t3)'}}>{(s.generatedAtTime||'').replace('T',' ').slice(0,19)}</span>
+          <span style={{display:'flex',gap:6,alignItems:'center'}}>
+            {s.by&&<span style={{color:'var(--t3)'}}>{s.by}</span>}
+            {s.progress!=null&&<span style={{fontFamily:'var(--mono)'}}>{s.progress}%</span>}
+            {s.status&&<Badge status={s.status}/>}
+            {s.current&&<span style={{color:'var(--cyan)',fontFamily:'var(--mono)'}}>current</span>}
+          </span>
+        </div>
+      ))}
+      {open&&sv.length>1&&sv.map(s=>(
+        <div key={s.pds} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid var(--b1)',fontSize:10,opacity:s.current?1:.65}}>
+          <span style={{fontFamily:'var(--mono)',color:'var(--t3)'}}>{(s.generatedAtTime||'').replace('T',' ').slice(0,19)}</span>
+          <span style={{fontFamily:'var(--mono)'}}>schedule {s.start} → {s.end}{s.by?` · ${s.by}`:''}{s.current?' · current':''}</span>
+        </div>
+      ))}
+      {open&&<div style={{fontSize:10,color:'var(--t3)',marginTop:6}}>Earlier states are kept as ioc:ProcessDataState with prov:invalidatedAtTime.</div>}
+    </div>
+  );
+}
+
+// ── Add Process Modal ──────────────────────────────────────────────────────
+function AddProcessModal({projId,allProcs,onClose,onDone}){
+  const [form,setForm]=useState({id:'',label:'',actor:'',actorOrg:'',method:'',startDate:'',endDate:'',status:'planned',progress:0,space:'',predecessors:[]});
+  const [saving,setSaving]=useState(false);
+  const set=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
+
+  async function save(){
+    if(!form.label.trim())return;
+    setSaving(true);
+    await fetch(API(`/api/projects/${projId}/processes`),{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({...form,progress:parseInt(form.progress)||0})
+    });
+    setSaving(false);onDone();
+  }
+
+  function togglePred(uri){
+    setForm(f=>({...f,predecessors:f.predecessors.includes(uri)?f.predecessors.filter(x=>x!==uri):[...f.predecessors,uri]}));
+  }
+
+  return(
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{width:520}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">Add Process <Chip prop="Process"/></div>
+        <div className="g2">
+          <div className="form-group">
+            <label className="form-label">Process ID (optional)</label>
+            <input className="form-input" value={form.id} onChange={set('id')} placeholder="P15"/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Status</label>
+            <select className="form-select" value={form.status} onChange={set('status')}>
+              {['planned','ready','started','finished','paused','cancelled'].map(s=><option key={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Process Name *</label>
+          <input className="form-input" value={form.label} onChange={set('label')} placeholder="e.g. Concrete Pour — Foundation" autoFocus/>
+        </div>
+        <div className="g2">
+          <div className="form-group">
+            <label className="form-label">Actor (ioc:Actor)</label>
+            <input className="form-input" value={form.actor} onChange={set('actor')} placeholder="Name"/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Organisation</label>
+            <input className="form-input" value={form.actorOrg} onChange={set('actorOrg')} placeholder="Company"/>
+          </div>
+        </div>
+        <div className="g2">
+          <div className="form-group">
+            <label className="form-label">Method (ioc:Method)</label>
+            <input className="form-input" value={form.method} onChange={set('method')} placeholder="e.g. Ready-mix Pouring"/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Space / Location</label>
+            <input className="form-input" value={form.space} onChange={set('space')} placeholder="e.g. Zone A"/>
+          </div>
+        </div>
+        <div className="g2">
+          <div className="form-group">
+            <label className="form-label">Start Date</label>
+            <input className="form-input" type="date" value={form.startDate} onChange={set('startDate')}/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">End Date</label>
+            <input className="form-input" type="date" value={form.endDate} onChange={set('endDate')}/>
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Progress %</label>
+          <input className="form-input" type="number" min={0} max={100} value={form.progress} onChange={set('progress')}/>
+        </div>
+        {allProcs.length>0&&(
+          <div className="form-group">
+            <label className="form-label">Predecessors (ioc:hasPredecessor)</label>
+            <div style={{maxHeight:120,overflowY:'auto',border:'1px solid var(--b2)',borderRadius:'var(--r)',padding:8,display:'flex',flexDirection:'column',gap:4}}>
+              {allProcs.map(p=>(
+                <label key={p.uri} style={{display:'flex',alignItems:'center',gap:7,cursor:'pointer',fontSize:12}}>
+                  <input type="checkbox" checked={form.predecessors.includes(p.uri)}
+                         onChange={()=>togglePred(p.uri)} style={{accentColor:'var(--cyan)'}}/>
+                  {p.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
+          <button className="btn btn-g" onClick={onClose}>Cancel</button>
+          <button className="btn btn-p" onClick={save} disabled={saving}>{saving?'Saving…':'Add Process'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Dependency Graph ───────────────────────────────────────────────────────
+function DependencyGraph({projId,projName,globalTick}){
+  const {data,loading}=useFetch(API(`/api/projects/${projId}/dependencies`),[projId,globalTick]);
+  const [sel,setSel]=useState(null);
+
+  if(loading)return <Loading/>;
+  if(!data)return null;
+
+  const {nodes,edges}=data;
+  const inDeg={};
+  nodes.forEach(n=>inDeg[n.id]=0);
+  edges.forEach(e=>inDeg[e.target]=(inDeg[e.target]||0)+1);
+
+  const cols={},colOf={};
+  const q=nodes.filter(n=>inDeg[n.id]===0).map(n=>n.id);
+  q.forEach(id=>colOf[id]=0);
+  const visited=[...q];
+  while(q.length){
+    const id=q.shift();
+    edges.filter(e=>e.source===id).forEach(e=>{
+      colOf[e.target]=Math.max(colOf[e.target]||0,(colOf[id]||0)+1);
+      inDeg[e.target]--;
+      if(inDeg[e.target]===0){q.push(e.target);visited.push(e.target);}
+    });
+  }
+  // any unvisited nodes (cycles)
+  nodes.forEach(n=>{if(colOf[n.id]===undefined)colOf[n.id]=0;});
+  nodes.forEach(n=>{cols[colOf[n.id]]=cols[colOf[n.id]]||[];cols[colOf[n.id]].push(n.id);});
+
+  const NW=190,NH=52,PADX=30,PADY=30,COLW=230,ROWH=68;
+  const numCols=Object.keys(cols).length;
+  const maxRows=Math.max(...Object.values(cols).map(c=>c.length));
+  const W=numCols*COLW+PADX*2;
+  const H=Math.max(maxRows*ROWH+PADY*2,300);
+
+  const pos={};
+  Object.entries(cols).forEach(([c,ids])=>{
+    ids.forEach((id,row)=>{
+      const totalH=ids.length*ROWH;
+      const startY=(H-totalH)/2;
+      pos[id]={x:PADX+parseInt(c)*COLW,y:startY+row*ROWH};
+    });
+  });
+
+  const nodeMap={};
+  nodes.forEach(n=>nodeMap[n.id]=n);
+
+  return(
+    <div>
+      <div style={{marginBottom:14}}>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>Dependency Graph</div>
+        <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10}}>
+          <Chip prop="hasPredecessor"/><Chip prop="hasSuccessor"/>
+          <span>Green edge = predecessor finished · Red = blocked</span>
+        </div>
+        <div style={{display:'flex',gap:10,marginTop:8,flexWrap:'wrap'}}>
+          {Object.entries(ST_CLR).map(([l,c])=>(
+            <span key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:c}}>
+              <span style={{width:8,height:8,borderRadius:2,background:c,display:'inline-block'}}></span>{l}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div style={{background:'var(--s2)',border:'1px solid var(--b1)',borderRadius:'var(--r3)',overflow:'auto'}}>
+        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{display:'block'}}>
+          <defs>
+            <marker id="aok" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L7,3 z" fill="rgba(34,197,94,.6)"/>
+            </marker>
+            <marker id="ablk" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L7,3 z" fill="rgba(239,68,68,.5)"/>
+            </marker>
+          </defs>
+          {edges.map((e,i)=>{
+            const s=pos[e.source],t=pos[e.target];
+            if(!s||!t)return null;
+            const x1=s.x+NW,y1=s.y+NH/2,x2=t.x,y2=t.y+NH/2,mx=(x1+x2)/2;
+            const clr=e.blocked?'rgba(239,68,68,.35)':'rgba(34,197,94,.3)';
+            const mk=e.blocked?'url(#ablk)':'url(#aok)';
+            return <path key={i} d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`}
+              fill="none" strokeWidth={1.5} stroke={clr} markerEnd={mk}/>;
+          })}
+          {nodes.map(n=>{
+            const p=pos[n.id];if(!p)return null;
+            const clr=ST_CLR[n.status?.label]||'var(--t3)';
+            const isSel=sel===n.id;
+            return(
+              <g key={n.id} transform={`translate(${p.x},${p.y})`} style={{cursor:'pointer'}}
+                 onClick={()=>setSel(sel===n.id?null:n.id)}>
+                <rect width={NW} height={NH} fill={isSel?'#1e2d42':'var(--s1)'}
+                      stroke={isSel?'var(--cyan)':clr} strokeWidth={isSel?2:1} rx={7} ry={7} strokeOpacity={.8}/>
+                <rect width={NW*n.progress/100} height={NH} fill={clr} opacity={.06} rx={7} ry={7}/>
+                <text x={8} y={17} fontSize={9} fill={clr} fontFamily="IBM Plex Mono,monospace" fontWeight="600">{n.shortId}</text>
+                <text x={8} y={31} fontSize={10} fill="#dde4f0" fontFamily="DM Sans,sans-serif" fontWeight="600">{n.label.length>24?n.label.slice(0,24)+'…':n.label}</text>
+                {n.actor&&<text x={8} y={44} fontSize={9} fill="var(--t3)" fontFamily="IBM Plex Mono,monospace">{n.actor}</text>}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      {sel&&nodeMap[sel]&&(
+        <div className="card" style={{marginTop:14}}>
+          <div className="card-head">
+            <div className="card-title">{nodeMap[sel].label}</div>
+            <button className="btn btn-g btn-xs" onClick={()=>setSel(null)}>✕</button>
+          </div>
+          <div className="card-body" style={{display:'flex',gap:16,flexWrap:'wrap',fontSize:12}}>
+            <div><span style={{color:'var(--t3)'}}>Status: </span><Badge status={nodeMap[sel].status}/></div>
+            <div><span style={{color:'var(--t3)'}}>Actor: </span>{nodeMap[sel].actor||'—'}</div>
+            <div><span style={{color:'var(--t3)'}}>Progress: </span>{nodeMap[sel].progress}%</div>
+            <div><span style={{color:'var(--t3)'}}>Root: </span>{nodeMap[sel].isRoot?'Yes':'No'}</div>
+            <div><span style={{color:'var(--t3)'}}>Leaf: </span>{nodeMap[sel].isLeaf?'Yes':'No'}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Gantt ──────────────────────────────────────────────────────────────────
+function GanttTimeline({projId,globalTick}){
+  const {data,loading}=useFetch(API(`/api/projects/${projId}/gantt`),[projId,globalTick]);
+  if(loading)return <Loading/>;
+  if(!data?.items?.length)return <div className="empty">No processes with schedules found.<br/>Add start/end dates to see Gantt chart.</div>;
+
+  const {items,minDate,maxDate}=data;
+  if(!minDate||!maxDate)return <div className="empty">No date range available.</div>;
+
+  const start=new Date(minDate),end=new Date(maxDate);
+  end.setDate(end.getDate()+7);
+  const totalDays=Math.max((end-start)/86400000,1);
+  const SCALE=3.5; // px per day
+  const W=Math.max(totalDays*SCALE,600);
+
+  function dayOffset(dateStr){
+    const d=new Date(dateStr);
+    return Math.max(0,(d-start)/86400000)*SCALE;
+  }
+
+  // Generate month ticks
+  const ticks=[];
+  const cur=new Date(start);cur.setDate(1);
+  while(cur<=end){
+    const off=(cur-start)/86400000*SCALE;
+    if(off>=0)ticks.push({x:off,label:cur.toLocaleDateString('en',{month:'short',year:'2-digit'})});
+    cur.setMonth(cur.getMonth()+1);
+  }
+
+  const stClr={Finished:'var(--green)',Started:'var(--amber)',Planned:'var(--b3)',Ready:'var(--cyan)',Paused:'var(--purple)',Cancelled:'var(--red)'};
+
+  return(
+    <div>
+      <div style={{marginBottom:14}}>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>Gantt Timeline</div>
+        <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10}}>
+          <Chip prop="Schedule"/><Chip prop="hasDuration"/>
+          <span>prov:startedAtTime → prov:endedAtTime</span>
+        </div>
+        <div style={{display:'flex',gap:10,marginTop:8,flexWrap:'wrap'}}>
+          {Object.entries(stClr).map(([l,c])=>(
+            <span key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:c}}>
+              <span style={{width:10,height:4,borderRadius:2,background:c,display:'inline-block'}}></span>{l}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div style={{background:'var(--s1)',border:'1px solid var(--b1)',borderRadius:'var(--r3)',overflow:'hidden'}}>
+        {/* Header */}
+        <div className="gantt-header">
+          <div className="gantt-hlabel">Process</div>
+          <div className="gantt-dates" style={{width:W,minWidth:W,position:'relative',height:28}}>
+            {ticks.map((t,i)=>(
+              <React.Fragment key={i}>
+                <div className="gantt-gridline" style={{left:t.x,height:2000,top:0,opacity:.5}}/>
+                <div className="gantt-date-tick" style={{left:t.x+3,top:8}}>{t.label}</div>
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+        {/* Rows */}
+        <div style={{overflowX:'auto'}}>
+          {items.map(item=>{
+            const left=dayOffset(item.startDate);
+            const width=Math.max(item.durationDays*SCALE,6);
+            const clr=stClr[item.status?.label]||'var(--b3)';
+            return(
+              <div className="gantt-row" key={item.id}>
+                <div className="gantt-label">
+                  <div style={{fontSize:11,fontWeight:600,color:'var(--t1)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.label}</div>
+                  <div style={{fontSize:9,color:'var(--t3)',fontFamily:'var(--mono)'}}>{item.actor||''}</div>
+                </div>
+                <div className="gantt-bar-area" style={{width:W,minWidth:W}}>
+                  {ticks.map((t,i)=><div key={i} className="gantt-gridline" style={{left:t.x,height:'100%',opacity:.3}}/>)}
+                  <div className="gantt-bar" style={{left:left,width:width,background:clr,color:clr==='var(--b3)'?'var(--t3)':'#000',opacity:.85}}
+                       title={`${item.label}\n${item.startDate} → ${item.endDate} (${item.durationDays}d)\n${item.status?.label}`}>
+                    {width>50&&item.label.slice(0,Math.floor(width/7))}
+                  </div>
+                  {item.slipDays>0&&item.baselineEnd&&(()=>{const bl=dayOffset(item.baselineEnd)-width;return(
+                    <div title={`Baseline end ${item.baselineEnd}; slip +${item.slipDays} d`} style={{position:'absolute',left:bl,width:width,height:20,top:7,borderRadius:4,border:'1px dashed var(--t3)',pointerEvents:'auto'}}/>)})()}
+                  {item.slipDays>0&&<div style={{position:'absolute',left:left+width+4,top:9,fontSize:9,fontFamily:'var(--mono)',color:'var(--red)'}}>+{item.slipDays}d</div>}
+                  {/* Progress overlay */}
+                  <div style={{position:'absolute',left:left,width:width*item.progress/100,height:20,top:7,borderRadius:4,background:'rgba(255,255,255,.12)',pointerEvents:'none'}}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SPARQL ─────────────────────────────────────────────────────────────────
+function SPARQLTab({projId,globalTick}){
+  const {data:presets}=useFetch(API('/api/sparql/presets'));
+  const [query,setQuery]=useState('');
+  const [results,setResults]=useState(null);
+  const [running,setRunning]=useState(false);
+  const [error,setError]=useState('');
+  const [activePreset,setActivePreset]=useState(null);
+
+  const categories=useMemo(()=>{
+    if(!presets?.presets)return{};
+    const cats={};
+    presets.presets.forEach(p=>{cats[p.category]=cats[p.category]||[];cats[p.category].push(p);});
+    return cats;
+  },[presets]);
+
+  function loadPreset(p){
+    setQuery(p.query);setActivePreset(p.id);setResults(null);setError('');
+  }
+
+  async function runQuery(){
+    if(!query.trim())return;
+    setRunning(true);setError('');setResults(null);
+    const r=await fetch(API(`/api/projects/${projId}/sparql`),{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})
+    });
+    const d=await r.json();
+    setRunning(false);
+    if(!d.success)setError(d.error||'Query failed');
+    else setResults(d);
+  }
+
+  return(
+    <div style={{display:'grid',gridTemplateColumns:'240px 1fr',gap:14,height:'calc(100vh - 120px)'}}>
+      {/* Preset list */}
+      <div style={{overflow:'hidden',display:'flex',flexDirection:'column'}}>
+        <div style={{fontWeight:700,fontSize:13,marginBottom:10,color:'var(--t1)'}}>Query Library</div>
+        <div className="qlist">
+          {Object.entries(categories).map(([cat,qs])=>(
+            <div key={cat}>
+              <div style={{fontSize:10,color:'var(--t3)',fontFamily:'var(--mono)',textTransform:'uppercase',letterSpacing:'.08em',padding:'8px 0 4px',fontWeight:600}}>{cat}</div>
+              {qs.map(q=>(
+                <div key={q.id} className={`qitem ${activePreset===q.id?'active':''}`} onClick={()=>loadPreset(q)}>
+                  <div className="qitem-title">{q.title}</div>
+                  <div className="qitem-cat">{q.id}{q.fr&&<span style={{color:'var(--cyan)',marginLeft:6}}>{q.fr}</span>}</div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Editor + results */}
+      <div style={{display:'flex',flexDirection:'column',gap:12,overflow:'hidden'}}>
+        <div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+            <div style={{fontWeight:700,fontSize:13}}>
+              SPARQL Query
+              {activePreset&&presets?.presets?.find(p=>p.id===activePreset)&&(
+                <span style={{fontWeight:400,fontSize:11,color:'var(--t3)',marginLeft:8}}>
+                  — {presets.presets.find(p=>p.id===activePreset).description}
+                </span>
+              )}
+            </div>
+            <button className="btn btn-p btn-sm" onClick={runQuery} disabled={running}>
+              {running?<><div className="spin" style={{width:12,height:12}}/>Running…</>:'▶ Run'}
+            </button>
+          </div>
+          <textarea className="qeditor" value={query} onChange={e=>setQuery(e.target.value)}
+                    placeholder="SELECT ?process ?label WHERE {&#10;  ?process a ioc:Process .&#10;  ?process rdfs:label ?label .&#10;}"/>
+        </div>
+
+        {error&&<div className="err">{error}</div>}
+
+        {results&&(
+          <div style={{flex:1,overflow:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <div style={{fontSize:12,color:'var(--t2)',fontFamily:'var(--mono)'}}>
+                {results.count} result{results.count!==1?'s':''}
+              </div>
+            </div>
+            <div style={{overflow:'auto',background:'var(--bg)',border:'1px solid var(--b1)',borderRadius:'var(--r)'}}>
+              {results.count===0
+                ?<div className="empty" style={{height:80}}>No results</div>
+                :<table className="qtable">
+                  <thead><tr>{results.variables.map(v=><th key={v}>{v}</th>)}</tr></thead>
+                  <tbody>
+                    {results.results.map((row,i)=>(
+                      <tr key={i}>{results.variables.map(v=>(
+                        <td key={v} style={{color:row[v]==='true'?'var(--green)':row[v]==='false'?'var(--red)':'var(--t1)'}}>
+                          {row[v]||<span style={{color:'var(--t3)'}}>—</span>}
+                        </td>
+                      ))}</tr>
+                    ))}
+                  </tbody>
+                </table>
+              }
+            </div>
+          </div>
+        )}
+
+        {!results&&!error&&!running&&(
+          <div className="empty" style={{background:'var(--s2)',borderRadius:'var(--r2)',border:'1px solid var(--b1)'}}>
+            Select a preset or write a query, then click Run
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Ontology Browser ───────────────────────────────────────────────────────
+// Classes, hierarchy, comments and properties come from the IoC TBox (ioc_tbox.ttl)
+// via /api/projects/{id}/ontology. Only the icon/colour map below is presentation.
+const CLASS_LOOK={Process:['⬡','#00c9c9'],ProcessData:['◈','#8fa0bc'],Actor:['👤','#3b82f6'],Resource:['🔧','#f59e0b'],
+  Element:['🧱','#a78bfa'],AuxiliaryElement:['📦','#6366f1'],RawMaterial:['🪨','#78716c'],Information:['📄','#22c55e'],
+  Method:['⚙','#06b6d4'],Schedule:['📅','#f97316'],Status:['🚦','#ef4444'],Space:['📐','#84cc16'],Location:['📍','#4ade80'],
+  Capability:['⚡','#fbbf24'],ProcessDataState:['🔗','#64748b'],CurrentProcessDataState:['✦','#94a3b8']};
+const look=n=>CLASS_LOOK[n]||['○','#8fa0bc'];
+
+function OntologyBrowser({projId,globalTick}){
+  const {data,loading}=useFetch(API(`/api/projects/${projId}/ontology`),[projId,globalTick]);
+  const [selected,setSelected]=useState('Process');
+  const [showExt,setShowExt]=useState(false);
+
+  const tree=useMemo(()=>{
+    if(!data)return[];
+    const byQ={};data.classes.forEach(c=>byQ[c.qname]=c);
+    const kids={};const roots=[];
+    data.classes.forEach(c=>{
+      const par=c.parents.filter(p=>byQ[p]);
+      if(par.length===0)roots.push(c);else par.forEach(p=>(kids[p]=kids[p]||[]).push(c));
+    });
+    const out=[];
+    const walk=(c,d)=>{out.push({...c,depth:d});(kids[c.qname]||[]).sort((a,b)=>a.name.localeCompare(b.name)).forEach(k=>walk(k,d+1))};
+    roots.sort((a,b)=>(b.name==='Process')-(a.name==='Process')||a.name.localeCompare(b.name)).forEach(r=>walk(r,0));
+    return out;
+  },[data]);
+
+  if(loading)return <Loading/>;
+  if(!data)return null;
+  const visible=tree.filter(c=>showExt||!c.external);
+  const cls=tree.find(c=>c.name===selected)||tree[0];
+  const [icon,color]=look(cls.name);
+  const props=data.properties.filter(p=>p.domain.includes(cls.qname));
+  const valueProps=data.properties.filter(p=>p.range.includes(cls.qname));
+  const rangeStyle=r=>r.startsWith('xsd:')?'xsd':r.startsWith('ioc:')?'ioc':'';
+  const hdr={padding:'7px 10px',fontSize:10,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--t3)',fontWeight:600,background:'var(--s2)',borderBottom:'1px solid var(--b1)'};
+
+  const PropTable=({rows})=>(
+    <div style={{background:'var(--bg)',border:'1px solid var(--b1)',borderRadius:'var(--r)',overflow:'hidden',marginBottom:16}}>
+      <div style={{display:'grid',gridTemplateColumns:'200px 170px 1fr'}}>
+        <div style={hdr}>Property</div><div style={hdr}>Range</div><div style={hdr}>Characteristics / comment</div>
+      </div>
+      {rows.map(p=>(
+        <div key={p.qname} className="ont-prop-row">
+          <div className="ont-prop-name" style={{opacity:p.usedInProject?1:.55}}>{p.qname}{p.usedInProject&&<span style={{color:'var(--green)'}}> ●</span>}</div>
+          <div className={`ont-prop-range ${rangeStyle(p.range[0]||'')}`}>{p.range.join(' ∪ ')||'—'}</div>
+          <div className="ont-prop-desc">
+            {[...p.characteristics,p.inverseOf&&`inverse of ${p.inverseOf}`,p.superProperty.length&&`⊑ ${p.superProperty.join(', ')}`].filter(Boolean).join(' · ')}
+            {p.comment&&<div style={{color:'var(--t3)'}}>{p.comment}</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  return(
+    <div>
+      <div style={{marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'flex-end',gap:12,flexWrap:'wrap'}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>Ontology Browser</div>
+          <div style={{fontSize:11,color:'var(--t3)',fontFamily:'var(--mono)'}}>
+            TBox: <span style={{color:'var(--cyan)'}}>{data.namespace}</span> · IoC v{data.version} · read from ioc_tbox.ttl
+          </div>
+        </div>
+        <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:12,alignItems:'center'}}>
+          <label style={{cursor:'pointer'}}><input type="checkbox" checked={showExt} onChange={e=>setShowExt(e.target.checked)}/> show aligned external classes</label>
+          <span>{data.classes.filter(c=>!c.external).length} classes · {data.properties.length} properties</span>
+        </div>
+      </div>
+
+      <div className="ont-layout">
+        <div className="ont-tree">
+          <div className="ont-tree-hdr">TBox classes (instances in ABox)</div>
+          {visible.map(c=>(
+            <div key={c.qname}
+                 className={`ont-tree-item ${c.depth===1?'child':c.depth>=2?'grandchild':''} ${selected===c.name?'active':''}`}
+                 onClick={()=>setSelected(c.name)}>
+              <span className="ont-tree-icon">{look(c.name)[0]}</span>
+              <span style={{fontFamily:'var(--mono)',fontWeight:selected===c.name?700:500,fontStyle:c.external?'italic':'normal'}}>{c.name}</span>
+              {c.instanceCount>0&&<span className="ont-tree-count">×{c.instanceCount}</span>}
+            </div>
+          ))}
+          {data.extensionTerms?.length>0&&(
+            <div style={{marginTop:14,padding:'8px 10px',fontSize:10,color:'var(--t3)',borderTop:'1px solid var(--b1)'}}>
+              <div style={{fontWeight:600,marginBottom:4}}>Application extension (not IoC)</div>
+              {data.extensionTerms.map(t=><div key={t} style={{fontFamily:'var(--mono)'}}>{t}</div>)}
+            </div>
+          )}
+        </div>
+
+        <div className="ont-detail">
+          <div style={{display:'flex',alignItems:'flex-start',gap:14,marginBottom:4}}>
+            <div className="ont-detail-icon" style={{background:`${color}22`,border:`1px solid ${color}44`}}>{icon}</div>
+            <div>
+              <div className="ont-detail-name" style={{color}}>{cls.name}</div>
+              <div className="ont-detail-uri">{cls.qname}</div>
+              {cls.parents.length>0&&<div className="ont-detail-sub">▴ subClassOf {cls.parents.join(', ')}</div>}
+            </div>
+          </div>
+          <div className="ont-detail-desc">{cls.comment||<span style={{color:'var(--t3)'}}>No rdfs:comment in the TBox.</span>}</div>
+          {cls.disjointWith.length>0&&<div style={{fontSize:11,color:'var(--t3)',marginBottom:12}}>disjoint with: <span style={{fontFamily:'var(--mono)'}}>{cls.disjointWith.join(', ')}</span></div>}
+
+          {props.length>0&&<><div className="ont-section-hdr">Properties with domain {cls.qname}</div><PropTable rows={props}/></>}
+          {valueProps.length>0&&<><div className="ont-section-hdr">Properties with range {cls.qname}</div><PropTable rows={valueProps}/></>}
+
+          <div className="ont-section-hdr">
+            Instances in current project (ABox)
+            <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--cyan)',fontWeight:400,marginLeft:4}}>
+              {cls.instanceCount>0?`${cls.instanceCount} (${cls.directCount} asserted directly)`:''}
+            </span>
+          </div>
+          {cls.instances.length===0
+            ?<div className="ont-empty">No {cls.name} instances in this project</div>
+            :<div className="ont-instances-grid">
+              {cls.instances.slice(0,120).map(inst=>(
+                <div key={inst.uri} className="ont-instance" title={inst.uri}>
+                  <span style={{color}}>{icon}</span>
+                  <span style={{color:'var(--t1)',fontFamily:'var(--mono)',fontSize:10}}>{inst.label}</span>
+                  {inst.status&&<Badge status={inst.status}/>}
+                  {inst.actor&&<span style={{color:'var(--t3)',fontSize:10}}>· {inst.actor}</span>}
+                </div>
+              ))}
+            </div>}
+          {cls.instances.length>120&&<div className="ont-empty">…and {cls.instances.length-120} more</div>}
+
+          <div style={{marginTop:20,paddingTop:14,borderTop:'1px solid var(--b1)'}}>
+            <div style={{fontSize:10,color:'var(--t3)',marginBottom:4,fontWeight:600,textTransform:'uppercase',letterSpacing:'.08em'}}>Full URI</div>
+            <div style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--t3)',wordBreak:'break-all',background:'var(--bg)',padding:'8px 10px',borderRadius:'var(--r)',border:'1px solid var(--b1)'}}>{cls.uri}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ABox ⟷ TBox validation ─────────────────────────────────────────────────
+function ValidationCard({projId,tick}){
+  const {data,loading,refetch}=useFetch(API(`/api/projects/${projId}/validate`),[projId,tick]);
+  const [open,setOpen]=useState(false);
+  return(
+    <div className="card" style={{marginBottom:12}}>
+      <div className="card-head">
+        <div className="card-title">Validation against the IoC TBox {data&&<span style={{fontFamily:'var(--mono)',fontWeight:400,color:'var(--t3)'}}>v{data.tboxVersion} · {data.triples} triples</span>}</div>
+        <button className="btn btn-g btn-xs" onClick={refetch}>↻ Re-check</button>
+      </div>
+      <div className="card-body" style={{fontSize:12}}>
+        {loading||!data?<Loading/>:<>
+          <div style={{fontWeight:600,color:data.conforms?'var(--green)':'var(--red)',marginBottom:8}}>
+            {data.conforms?'✓ The project data conforms to the IoC axioms that were checked':`✗ ${data.violations} violation(s)`}
+          </div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
+            {Object.entries(data.byRule).map(([r,n])=><Tag key={r} k={r.split(' ')[0]} v={`${r.slice(3)}: ${n}`}/>)}
+          </div>
+          {data.applicationExtensionTerms.length>0&&<div style={{fontSize:11,color:'var(--t3)'}}>Application extension terms (outside IoC): <span style={{fontFamily:'var(--mono)'}}>{data.applicationExtensionTerms.join(', ')}</span></div>}
+          <div style={{fontSize:10,color:'var(--t3)',marginTop:4}}>{data.note}</div>
+          {data.issues.length>0&&<>
+            <button className="btn btn-g btn-xs" style={{marginTop:8}} onClick={()=>setOpen(o=>!o)}>{open?'Hide':'Show'} issues</button>
+            {open&&<div style={{marginTop:8,maxHeight:220,overflow:'auto',fontFamily:'var(--mono)',fontSize:10}}>
+              {data.issues.map((i,k)=><div key={k} style={{padding:'3px 0',borderBottom:'1px solid var(--b1)'}}><span style={{color:'var(--red)'}}>{i.rule.split(' ')[0]}</span> {i.message} <span style={{color:'var(--t3)'}}>{i.subject}</span></div>)}
+            </div>}
+          </>}
+        </>}
+      </div>
+    </div>
+  );
+}
+
+// ── RDF Export ─────────────────────────────────────────────────────────────
+function RDFExport({projId,projName,globalTick}){
+  const [rdf,setRdf]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [copied,setCopied]=useState(false);
+
+  useEffect(()=>{
+    setLoading(true);
+    fetch(API(`/api/projects/${projId}/rdf`)).then(r=>r.text()).then(t=>{setRdf(t);setLoading(false)});
+  },[projId,globalTick]);
+
+  function highlight(t){
+    // single pass: each token is wrapped once, so spans are never re-matched
+    const esc=x=>x.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const re=/(#.*$)|("(?:[^"\\]|\\.)*")|(<[^>\s]*>)|(@prefix|\b(?:rdfs|xsd|prov|ioc|owl|ext|vcard|rdf):[\w-]*|\ba\b)|\b(true|false)\b/gm;
+    let out='',last=0,m;
+    while((m=re.exec(t))){
+      out+=esc(t.slice(last,m.index));
+      const cls=m[1]?'rdf-cmt':m[2]?'rdf-str':m[3]?'rdf-uri':m[4]?'rdf-kw':'rdf-bool';
+      out+=`<span class="${cls}">${esc(m[0])}</span>`;
+      last=re.lastIndex;
+    }
+    return out+esc(t.slice(last));
+  }
+
+  function download(){
+    const a=document.createElement('a');
+    a.href='data:text/turtle;charset=utf-8,'+encodeURIComponent(rdf);
+    a.download=`${projName.replace(/\s+/g,'_')}.ttl`;a.click();
+  }
+
+  if(loading)return <Loading/>;
+
+  return(
+    <div>
+      <div style={{marginBottom:16}}>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>RDF / Turtle Export</div>
+        <div style={{fontSize:11,color:'var(--t3)',marginBottom:12}}>
+          Turtle serialisation of the project ABox using <span style={{color:'var(--cyan)',fontFamily:'var(--mono)'}}>http://w3id.org/ioc#</span> · {rdf.split('\n').length} lines
+        </div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <button className="btn btn-p" onClick={download}>⬇ Download .ttl</button>
+          <button className="btn btn-g" onClick={()=>{navigator.clipboard.writeText(rdf).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000)});}}>
+            {copied?'✓ Copied!':'📋 Copy'}
+          </button>
+          <a href={API(`/api/projects/${projId}/rdf`)} target="_blank" rel="noreferrer">
+            <button className="btn btn-g">Open raw ↗</button>
+          </a>
+        </div>
+      </div>
+      <ValidationCard projId={projId} tick={globalTick}/>
+      <div className="rdf-pre" dangerouslySetInnerHTML={{__html:highlight(rdf)}}/>
+    </div>
+  );
+}
+
+// ── App Shell ──────────────────────────────────────────────────────────────
+const VIEWS=[
+  {id:'projects', icon:'⊞', label:'Projects', global:true},
+  {id:'board',    icon:'⬡', label:'Process Board'},
+  {id:'delays',   icon:'⚠', label:'Delay Watch'},
+  {id:'gantt',    icon:'▦', label:'Gantt Timeline'},
+  {id:'deps',     icon:'⟶', label:'Dependencies'},
+  {id:'sparql',   icon:'◈', label:'SPARQL Queries'},
+  {id:'ontology', icon:'◉', label:'Ontology Browser'},
+  {id:'rdf',      icon:'≋', label:'RDF Export'},
+];
+
+const VTITLES={projects:'Projects',board:'Process Board',delays:'Delay Watch',gantt:'Gantt Timeline',
+               deps:'Dependency Graph',sparql:'SPARQL Queries',ontology:'Ontology Browser',rdf:'RDF Export'};
+
+function App(){
+  const [view,setView]=useState('projects');
+  const [projId,setProjId]=useState(null);
+  const [projName,setProjName]=useState('');
+
+  // ── Global sync counter ───────────────────────────────────────────────────
+  // Incremented whenever any view mutates project data (status change, add,
+  // delete). Every view includes this in its useFetch deps, so all active
+  // fetches re-run simultaneously — no manual "navigate away and back" needed.
+  const [globalTick,setGlobalTick]=useState(0);
+  const [syncFlash,setSyncFlash]=useState(false);
+
+  const onMutate=useCallback(()=>{
+    setGlobalTick(t=>t+1);
+    // Brief topbar flash so the user sees the sync happened
+    setSyncFlash(true);
+    setTimeout(()=>setSyncFlash(false), 1200);
+  },[]);
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function openProject(id,name){
+    setProjId(id);setProjName(name);setView('board');
+  }
+
+  function switchView(v){
+    if(!VIEWS.find(x=>x.id===v)?.global&&!projId)return;
+    setView(v);
+  }
+
+  return(
+    <div className="app">
+      <aside className="sidebar">
+        <div className="logo">
+          <div className="logo-title">IoC Process Manager</div>
+          <div className="logo-sub">ABox over IoC TBox v0.5.1</div>
+        </div>
+        <nav className="nav">
+          {VIEWS.map(v=>{
+            const disabled=!v.global&&!projId;
+            return(
+              <div key={v.id}
+                   className={`nav-item ${view===v.id?'active':''} ${disabled?'disabled':''}`}
+                   style={disabled?{opacity:.3,cursor:'not-allowed'}:{}}
+                   onClick={()=>!disabled&&switchView(v.id)}>
+                <span className="nav-icon">{v.icon}</span>{v.label}
+              </div>
+            );
+          })}
+          {projId&&(
+            <>
+              <div className="nav-proj">Current Project</div>
+              <div style={{padding:'6px 10px',fontSize:11,color:'var(--cyan)',fontFamily:'var(--mono)',
+                           background:'var(--cyan2)',borderRadius:'var(--r)',wordBreak:'break-word'}}>
+                {projName}
+              </div>
+              <div style={{marginTop:8}}>
+                <div className="nav-item" onClick={()=>{setProjId(null);setProjName('');setView('projects');}}>
+                  <span className="nav-icon">←</span>All Projects
+                </div>
+              </div>
+            </>
+          )}
+        </nav>
+        <div className="sidebar-foot">
+          FastAPI · rdflib · React 18<br/>
+          <a href={API('/api/projects')} target="_blank">API</a>
+          {projId&&<> · <a href={API(`/api/projects/${projId}/rdf`)} target="_blank">RDF</a></>}
+        </div>
+      </aside>
+
+      <div className="main">
+        <div className="topbar">
+          <div className="topbar-left">
+            <div className="topbar-title">{VTITLES[view]}</div>
+            {projId&&<div className="topbar-proj">{projName}</div>}
+          </div>
+          <div className="topbar-right">
+            {/* Sync indicator — flashes green briefly after any mutation */}
+            <div className="live" style={{transition:'opacity .3s',opacity:syncFlash?1:.5}}>
+              <span className="live-dot" style={{background:syncFlash?'var(--cyan)':'var(--green)',
+                transition:'background .3s'}}/>
+              {syncFlash
+                ? <span style={{color:'var(--cyan)',fontWeight:600}}>All views synced</span>
+                : <span>Connected · {API_BASE||location.host}</span>
+              }
+            </div>
+          </div>
+        </div>
+        <div className="content">
+          {view==='projects'&&<Projects onOpen={openProject}/>}
+          {view==='board'   &&projId&&<ProcessBoard projId={projId} projName={projName} globalTick={globalTick} onMutate={onMutate}/>}
+          {view==='delays'  &&projId&&<DelayWatch projId={projId} globalTick={globalTick}/>}
+          {view==='gantt'   &&projId&&<GanttTimeline projId={projId} globalTick={globalTick}/>}
+          {view==='deps'    &&projId&&<DependencyGraph projId={projId} projName={projName} globalTick={globalTick}/>}
+          {view==='sparql'  &&projId&&<SPARQLTab projId={projId} globalTick={globalTick}/>}
+          {view==='ontology'&&projId&&<OntologyBrowser projId={projId} globalTick={globalTick}/>}
+          {view==='rdf'     &&projId&&<RDFExport projId={projId} projName={projName} globalTick={globalTick}/>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

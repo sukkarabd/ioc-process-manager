@@ -1,0 +1,666 @@
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix ioc: <http://w3id.org/ioc#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix schema: <https://schema.org/> .
+@prefix vann: <http://purl.org/vocab/vann/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+dcterms:creator a owl:AnnotationProperty .
+
+dcterms:description a owl:AnnotationProperty .
+
+dcterms:issued a owl:AnnotationProperty .
+
+dcterms:title a owl:AnnotationProperty .
+
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+
+vann:preferredNamespaceUri a owl:AnnotationProperty .
+
+<http://schema.org/domainIncludes> a owl:AnnotationProperty .
+
+<http://schema.org/rangeIncludes> a owl:AnnotationProperty .
+
+ioc:AuxiliaryElement a owl:Class ;
+    rdfs:label "AuxiliaryElement"^^xsd:string ;
+    rdfs:comment "A secondary element that is not part of the realized building afterwards."^^xsd:string ;
+    rdfs:isDefinedBy <http://w3id.org/ioc> ;
+    rdfs:subClassOf ioc:Element ;
+    owl:disjointWith ioc:RawMaterial,
+        <https://w3id.org/bot#Element> .
+
+ioc:CurrentProcessDataState a owl:Class ;
+    rdfs:label "CurrentProcessDataState"^^xsd:string ;
+    rdfs:comment "The current Intermediate Node which helps to add metadata to the object property connecting the Process to its sepcific ProcessData. Functionality adapted form opm ontology."^^xsd:string ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:subClassOf ioc:ProcessDataState .
+
+ioc:generatedByActor a owl:InverseFunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "generatedByActor"^^xsd:string ;
+    rdfs:comment "The ioc:Actor that generated the information branch"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Actor .
+
+ioc:hasCapability a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasCapability"^^xsd:string ;
+    rdfs:comment "The version of a capability a resource inherits"^^xsd:string ;
+    rdfs:domain ioc:Resource ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState .
+
+ioc:hasChild a owl:AsymmetricProperty,
+        owl:InverseFunctionalProperty,
+        owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "hasChild"^^xsd:string ;
+    rdfs:comment "Child process of a process. A process can have a undeifned number of children"^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Process ;
+    owl:inverseOf ioc:hasParent .
+
+ioc:hasDuration a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label <http://w3id.org/hasDuration> ;
+    rdfs:comment "Duration of a Process Schedule"^^xsd:string ;
+    rdfs:domain ioc:Schedule ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range rdfs:Literal .
+
+ioc:hasElement a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasElement"^^xsd:string ;
+    rdfs:comment "Points to a version of an element grouping"^^xsd:string ;
+    rdfs:domain ioc:Element ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState .
+
+ioc:hasInternalProcessMark a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "hasInternalProcessMark"^^xsd:string ;
+    rdfs:comment "A optional, internal process mark that can be used to add custom functionality to the process model"^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range xsd:string .
+
+ioc:hasLocation a owl:AsymmetricProperty,
+        owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasLocation"^^xsd:string ;
+    rdfs:comment "Property to connect a element, resource or spatial zone."^^xsd:string ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( ioc:Element ioc:Resource <https://standards.buildingsmart.org/IFC/DEV/IFC4/ADD2_TC1/OWL#IfcSpace> <https://w3id.org/bot#Zone> ) ] ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState .
+
+ioc:hasPredecessor a owl:AsymmetricProperty,
+        owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "hasPredecessor"^^xsd:string ;
+    rdfs:comment "Logical Predecessor of a process. Must be finished for the process to be ready."^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Process ;
+    owl:inverseOf ioc:hasSuccessor .
+
+ioc:isCancelled a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "isCancelled"^^xsd:string ;
+    rdfs:comment "A boolean that describes if the process was canceled."^^xsd:string ;
+    rdfs:domain ioc:Status ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range xsd:boolean .
+
+ioc:isContainedIn a owl:AsymmetricProperty,
+        owl:InverseFunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "isContainedIn"^^xsd:string ;
+    rdfs:comment "Object Property to describe the containment of Locations, Resources or Elements in Spatial Zones"^^xsd:string ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( ioc:Location ioc:Resource <https://w3id.org/bot#Element> ) ] ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState .
+
+ioc:isFinished a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "isFinished"^^xsd:string ;
+    rdfs:comment "A boolean that describes if the process was finished."^^xsd:string ;
+    rdfs:domain ioc:Status ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range xsd:boolean .
+
+ioc:isPaused a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "isPaused"^^xsd:string ;
+    rdfs:comment "A boolean that describes if the process is canceled."^^xsd:string ;
+    rdfs:domain ioc:Status ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range xsd:boolean .
+
+ioc:isReady a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "isReady"^^xsd:string ;
+    rdfs:comment "A boolean that describes if the process is ready to start."^^xsd:string ;
+    rdfs:domain ioc:Status ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range xsd:boolean .
+
+ioc:isStarted a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "isStarted"^^xsd:string ;
+    rdfs:comment "A boolean that describes if the process was started."^^xsd:string ;
+    rdfs:domain ioc:Status ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range xsd:boolean .
+
+ioc:isvalid a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "isvalid"^^xsd:string ;
+    rdfs:comment "A boolean that describes if a ProcessDataState os considered valid trhough extra validation. WIP"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range xsd:boolean .
+
+xsd:duration a rdfs:Datatype .
+
+<http://www.w3.org/2006/vcard/ns#Vcard> a owl:Class ;
+    rdfs:label "vCard"^^xsd:string ;
+    rdfs:comment "parent for the four explicit types of vCards (Individual, Organization, Location, Group)"^^xsd:string ;
+    rdfs:isDefinedBy <http://www.w3.org/2006/vcard/ns#> ;
+    rdfs:subClassOf ioc:Actor .
+
+<http://www.w3.org/2006/vcard/ns#family-name> a owl:AnnotationProperty .
+
+<http://www.w3.org/2006/vcard/ns#fn> a owl:AnnotationProperty .
+
+<http://www.w3.org/2006/vcard/ns#given-name> a owl:AnnotationProperty .
+
+<http://www.w3.org/2006/vcard/ns#hasOrganizationName> a owl:AnnotationProperty .
+
+<http://www.w3.org/2006/vcard/ns#hasURL> a owl:AnnotationProperty .
+
+<http://www.w3.org/2006/vcard/ns#organization-name> a owl:AnnotationProperty .
+
+prov:endedAtTime a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "endedAtTime"^^xsd:string ;
+    rdfs:comment "End is when an activity is deemed to have been ended by an entity, known as trigger. The activity no longer exists after its end. Any usage, generation, or invalidation involving an activity precedes the activity's end. An end may refer to a trigger entity that terminated the activity, or to an activity, known as ender that generated the trigger."^^xsd:string ;
+    rdfs:domain ioc:Schedule ;
+    rdfs:isDefinedBy prov: ;
+    rdfs:range xsd:dateTime .
+
+prov:generatedAtTime a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "generatedAtTime"^^xsd:string ;
+    rdfs:comment "Generation is the completion of production of a new entity by an activity. This entity did not exist before generation and becomes available for usage after this generation."^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy prov: ;
+    rdfs:range xsd:dateTime .
+
+prov:startedAtTime a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "startedAtTime"^^xsd:string ;
+    rdfs:comment "Start is when an activity is deemed to have been started by an entity, known as trigger. The activity did not exist before its start. Any usage, generation, or invalidation involving an activity follows the activity's start. A start may refer to a trigger entity that set off the activity, or to an activity, known as starter, that generated the trigger."^^xsd:string ;
+    rdfs:domain ioc:Schedule ;
+    rdfs:isDefinedBy prov: ;
+    rdfs:range xsd:dateTime .
+
+schema:name a owl:AnnotationProperty .
+
+<https://w3id.org/cto#Task> a owl:Class ;
+    rdfs:label <http://w3id.org/Task> ;
+    rdfs:comment "A generic class for defining (planned or executed) construction tasks according to the CTO ontology (see https://mathib.github.io/cto-ontology/)"^^xsd:string ;
+    rdfs:isDefinedBy <https://w3id.org/cto#> ;
+    rdfs:subClassOf ioc:Process .
+
+<https://w3id.org/cto#TaskMethod> a owl:Class ;
+    rdfs:label "TaskMethod"^^xsd:string ;
+    rdfs:comment "CTO task method that is used in (L2) and (L3)"^^xsd:string ;
+    rdfs:isDefinedBy <http://w3id.org/cto#> ;
+    rdfs:subClassOf ioc:Method .
+
+<https://w3id.org/omg#hasGeometry> a owl:InverseFunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasGeometry"^^xsd:string ;
+    rdfs:comment "Property for connecting geometries to elements, resources or spatial zones"^^xsd:string ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( ioc:Element ioc:Resource <https://standards.buildingsmart.org/IFC/DEV/IFC4/ADD2_TC1/OWL#IfcSpace> <https://w3id.org/bot#Zone> ) ] ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range <https://w3id.org/omg#Geometry> .
+
+ioc:RawMaterial a owl:Class ;
+    rdfs:label "RawMaterial"^^xsd:string ;
+    rdfs:comment "A basic, unprocessed material that is used to produce goods"^^xsd:string ;
+    rdfs:isDefinedBy "http://w3id.org/ioc#"^^xsd:string ;
+    rdfs:subClassOf ioc:Element .
+
+ioc:hasActor a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasActor"^^xsd:string ;
+    rdfs:comment "A responsible person or organization can be assigned to a process with the object property \"hasActor\" "^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState ;
+    rdfs:subPropertyOf ioc:hasProcessDataState .
+
+ioc:hasActorValue a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasActorValue"^^xsd:string ;
+    rdfs:comment "object property to link a specific version of an actor links to the process actor."^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Actor ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasCapabilityRequirement a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasCapabilityRequirement"^^xsd:string ;
+    rdfs:comment "Property for adding a version of a capability requirement to a process"^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState ;
+    rdfs:subPropertyOf ioc:hasProcessDataState .
+
+ioc:hasCapabilityRequirementValue a owl:ObjectProperty ;
+    rdfs:label "hasCapabilityRequirementValue"^^xsd:string ;
+    rdfs:comment "object property to link a specific version of an capability requirement  to one or more capabilities describring a process requirement"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Capability ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasCapabilityValue a owl:ObjectProperty ;
+    rdfs:label "hasCapabilityValue"^^xsd:string ;
+    rdfs:comment "object property to link a specific version of an capability of a resource  to one or more capabilities"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Capability ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasElementValue a owl:ObjectProperty ;
+    rdfs:label "hasElementValue"^^xsd:string ;
+    rdfs:comment "object property to link a specific version of an Element  to one or more elements"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Element ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasInitialSpace a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasInitialSpace"^^xsd:string ;
+    rdfs:comment "Property to add a version of a initial space, which defines the input of a location or space which the process requires"^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState ;
+    rdfs:subPropertyOf ioc:hasProcessDataState .
+
+ioc:hasInputElement a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasInputElement"^^xsd:string ;
+    rdfs:comment "Version of an element that the process transforms"^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState ;
+    rdfs:subPropertyOf ioc:hasProcessDataState .
+
+ioc:hasInputElementValue a owl:ObjectProperty ;
+    rdfs:label "hasInputElementValue"^^xsd:string ;
+    rdfs:comment "Property for linking a version of an element that the process transforms to the speciffic element classes."^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Element ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasInputInformation a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasInputInformation"^^xsd:string ;
+    rdfs:comment "Property for connecting a version of a piece of information or a infromation container to a process"^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState ;
+    rdfs:subPropertyOf ioc:hasProcessDataState .
+
+ioc:hasInputInformationValue a owl:ObjectProperty ;
+    rdfs:label "hasInputInformationValue"^^xsd:string ;
+    rdfs:comment "object property to link a specific version of an piece of input information to one or more pieces of information"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Information ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasMethod a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasMethod"^^xsd:string ;
+    rdfs:comment "Property for connecting a version of a Method. Method can describe an uninstanciated process in general, like \"milling\" or \"fixing\""^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState ;
+    rdfs:subPropertyOf ioc:hasProcessDataState .
+
+ioc:hasMethodValue a owl:ObjectProperty ;
+    rdfs:label "hasMethodValue"^^xsd:string ;
+    rdfs:comment "object property to link a specific version of a method  to one or more instanciated Methods"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Method ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasOutputElement a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasOutputElement"^^xsd:string ;
+    rdfs:comment "Version of an element that the process has transformed"^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState ;
+    rdfs:subPropertyOf ioc:hasProcessDataState .
+
+ioc:hasOutputElementValue a owl:ObjectProperty ;
+    rdfs:label "hasOutputElementValue"^^xsd:string ;
+    rdfs:comment "Property for linking a version of an element that the process has transformed to the speciffic element classes."^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Element ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasOutputInformation a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasOutputInformation"^^xsd:string ;
+    rdfs:comment "Property for connecting a version of a piece of information or a infromation container to a process which was transformed by the process"^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState ;
+    rdfs:subPropertyOf ioc:hasProcessDataState .
+
+ioc:hasOutputInformationValue a owl:ObjectProperty ;
+    rdfs:label "hasOutputInformationValue"^^xsd:string ;
+    rdfs:comment "object property to link a specific version of an piece of output information to one or more pieces of information"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Information ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasParent a owl:AsymmetricProperty,
+        owl:FunctionalProperty,
+        owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "hasParent"^^xsd:string ;
+    rdfs:comment "Parent of a Process. A Process can at most have one parent."^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Process .
+
+ioc:hasResource a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasResource"^^xsd:string ;
+    rdfs:comment "Object property to link a resource, which is defined as pysical or tangible item, material, equipment or asset that is necessary for the successful execution of a construction process."^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState ;
+    rdfs:subPropertyOf ioc:hasProcessDataState .
+
+ioc:hasResourceValue a owl:ObjectProperty ;
+    rdfs:label "hasResourceValue"^^xsd:string ;
+    rdfs:comment "Object property to link a  version of a resource, which is defined as pysical or tangible item, material, equipment or asset that is necessary for the successful execution of a construction process, to instanciated class"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Resource ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasSchedule a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasSchedule"^^xsd:string ;
+    rdfs:comment "Object property to connect  a detailed and organized plan that outlines the sequence and timing of tasks, activities, and events required to complete a specific process."^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState ;
+    rdfs:subPropertyOf ioc:hasProcessDataState .
+
+ioc:hasStatus a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasStatus"^^xsd:string ;
+    rdfs:comment "Object property to connect a version of a condition or state of the process. It is descirbed with a combination of bools."^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState ;
+    rdfs:subPropertyOf ioc:hasProcessDataState .
+
+ioc:hasSuccessor a owl:AsymmetricProperty,
+        owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "hasSuccessor"^^xsd:string ;
+    rdfs:comment "Logical Successor of a process. The process must be  finished for the sucessor to be ready."^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Process .
+
+ioc:hasTargetSpace a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasTargetSpace"^^xsd:string ;
+    rdfs:comment "Property to add a version of an output space, thus defining the transformed location or space of the process"^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState ;
+    rdfs:subPropertyOf ioc:hasProcessDataState .
+
+ioc:isContainedInValue a owl:ObjectProperty ;
+    rdfs:label "isContainedInValue"^^xsd:string ;
+    rdfs:comment "Object Property to describe the containment of Locations, Resources or Elements in Spatial Zones from version to instance"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( <https://standards.buildingsmart.org/IFC/DEV/IFC4/ADD2_TC1/OWL#IfcSpace> <https://w3id.org/bot#Zone> ) ] ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+<https://w3id.org/omg#Geometry> a owl:Class ;
+    rdfs:label "Geometry"^^xsd:string ;
+    rdfs:comment "Geometry of an element.Use https://w3id.org/fog# for Geometry Formats."^^xsd:string ;
+    rdfs:isDefinedBy ioc: .
+
+<http://w3id.org/ioc> a owl:Ontology ;
+    dcterms:creator "Oraskari, J., Individualized Production RWTH Aachen"^^xsd:string,
+        "Kirner, L., Individualized Production RWTH Aachen"@en,
+        "Wildemann,P., Leonhard Weiss GmbH & Co. KG"@en ;
+    dcterms:description "The Internet of Construction Ontology (IoC) construction process ontology is intended to represent a comprehensive solution of how processes in the construction industry can be modelled. Due to the iterative nature of creating an ontology, the construction process ontology presented here can at best be considered a working state at the time of publication. Our approach emphasizes the simplest and most comprehensive mapping possible, which is only extended based on insights from practical use when otherwise compelling limitations in usability and applicability arise. Thus, the extension and refinement of the developed construction process ontology strongly depends on the integration of further areas of the construction value chain and the connection of further domain ontologies."@en ;
+    dcterms:issued "2024-01-26"@en ;
+    dcterms:title "IOC: Internet of Construction Ontology"@en ;
+    vann:preferredNamespacePrefix "ioc"^^xsd:string ;
+    vann:preferredNamespaceUri "http://w3id.org/ioc#"^^xsd:string ;
+    rdfs:comment "The Internet of Construction Ontology (IoC) is a top-level ontology for describing processes and process-data in the domain of construction. It is a ongoing work as part of the research project “Internet of Construction” that is funded by the Federal Ministry of Education and Research of Germany within the indirective on a joint funding initiative in the field of innovation for production, services and labor of tomorrow (funding number: 02P17D081)."@en ;
+    owl:versionInfo "0.5.1" .
+
+ioc:hasInitialSpaceValue a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasInitialSpaceValue"^^xsd:string ;
+    rdfs:comment "object property to link a specific version of an inistial space to the class describing its exact value"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Space ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasLocationValue a owl:ObjectProperty ;
+    rdfs:label "hasLocationValue"^^xsd:string ;
+    rdfs:comment "object property to link a specific version of a location  to one or more location instances"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Location ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasScheduleValue a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasScheduleValue"^^xsd:string ;
+    rdfs:comment "Object property to connect a version of a detailed and organized plan that outlines the sequence and timing of tasks, activities, and events required to complete a specific proces to a instanciated Schedule"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Schedule ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasStatusValue a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasStatusValue"^^xsd:string ;
+    rdfs:comment "Object property to connect a version of a condition or state of the process to a single, instanciated status. It is descirbed with a combination of bools."^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Status ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+ioc:hasTargetSpaceValue a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasTargetSpaceValue"^^xsd:string ;
+    rdfs:comment "Property to add a isingle instance to a version of an output space, thus defining the transformed location or space of the process"^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:Space ;
+    rdfs:subPropertyOf ioc:hasValue .
+
+<https://w3id.org/bot#Element> a owl:Class ;
+    rdfs:label "Element"^^xsd:string ;
+    rdfs:comment "Element - Constituent of a construction entity with a characteristic technical function, form or position [[ISO-12006], 3.4.7]."^^xsd:string ;
+    rdfs:isDefinedBy <http://w3id.org/https.//w3id.org/bot#> ;
+    rdfs:subClassOf ioc:Element .
+
+ioc:Actor a owl:Class ;
+    rdfs:label "Actor"^^xsd:string ;
+    rdfs:comment "A responsible person or organization. can be assigned to a process"^^xsd:string ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:subClassOf ioc:ProcessData ;
+    owl:disjointWith ioc:Capability,
+        ioc:Element,
+        ioc:Information,
+        ioc:Method,
+        ioc:Resource,
+        ioc:Schedule,
+        ioc:Space,
+        ioc:Status .
+
+ioc:Capability a owl:Class ;
+    rdfs:label "Capability"^^xsd:string ;
+    rdfs:comment "Refers to the ability or capacity of an individual, organization, system, or entity to perform a specific action, task, or function effectively."^^xsd:string ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:subClassOf ioc:ProcessData .
+
+ioc:Information a owl:Class ;
+    rdfs:label "Information"^^xsd:string ;
+    rdfs:comment ioc:,
+        "Structured Process Data. This class is meant to be a loose connection to other files and information containers."^^xsd:string ;
+    rdfs:subClassOf ioc:ProcessData .
+
+ioc:Location a owl:Class ;
+    rdfs:label "Location"^^xsd:string ;
+    rdfs:comment "A location in the sense of a describable,precise point in space"^^xsd:string ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:subClassOf ioc:Space ;
+    owl:disjointWith <https://standards.buildingsmart.org/IFC/DEV/IFC4/ADD2_TC1/OWL#IfcSpace>,
+        <https://w3id.org/bot#Zone> .
+
+ioc:Method a owl:Class ;
+    rdfs:label "Method"^^xsd:string ;
+    rdfs:comment "The Method that is used to perform the process described. Used as Interface to mor specific domain ontologies."^^xsd:string ;
+    rdfs:isDefinedBy <http://w3id.org/ioc> ;
+    rdfs:subClassOf ioc:ProcessData .
+
+xsd:dateTime a rdfs:Datatype .
+
+<https://standards.buildingsmart.org/IFC/DEV/IFC4/ADD2_TC1/OWL#IfcSpace> a owl:Class ;
+    rdfs:label "IfcSpace"^^xsd:string ;
+    rdfs:comment "A space represents an area or volume bounded actually or theoretically. Spaces are areas or volumes that provide for certain functions within a building"^^xsd:string ;
+    rdfs:isDefinedBy <https://standards.buildingsmart.org/IFC/DEV/IFC4/ADD2_TC1/OWL#> ;
+    rdfs:subClassOf ioc:Space .
+
+<https://w3id.org/bot#Zone> a owl:Class ;
+    rdfs:label "Zone"^^xsd:string ;
+    rdfs:comment "A part of the physical world or a virtual world that is inherently both located in this world and has a 3D spatial extent."^^xsd:string ;
+    rdfs:isDefinedBy <http://w3id.org/bot#> ;
+    rdfs:subClassOf ioc:Space .
+
+ioc:Resource a owl:Class ;
+    rdfs:label "Resource"^^xsd:string ;
+    rdfs:comment "refers to any physical or tangible item, material, equipment or asset that is necessary for the successful execution of a construction process."^^xsd:string ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:subClassOf ioc:ProcessData .
+
+ioc:Schedule a owl:Class ;
+    rdfs:label "Schedule"^^xsd:string ;
+    rdfs:comment "A process schedule is a detailed and organized plan that outlines the sequence and timing of tasks, activities, and events required to complete a specific process."^^xsd:string ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:subClassOf ioc:ProcessData .
+
+ioc:Space a owl:Class ;
+    rdfs:label "Space"^^xsd:string ;
+    rdfs:comment "Generic Superclass for Spatial Information"^^xsd:string ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:subClassOf ioc:ProcessData .
+
+ioc:Status a owl:Class ;
+    rdfs:label "Status"^^xsd:string ;
+    rdfs:comment "Status refers to the current conditionor state of the process. It is descirbed with a combination of bools."^^xsd:string ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:subClassOf ioc:ProcessData .
+
+ioc:Element a owl:Class ;
+    rdfs:label "Element"^^xsd:string ;
+    rdfs:comment "A element or a group of elements."^^xsd:string ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:subClassOf ioc:ProcessData .
+
+ioc:ProcessData a owl:Class ;
+    rdfs:label <http://w3id.org/ProcessData> ;
+    rdfs:isDefinedBy ioc: .
+
+ioc:hasProcessDataState a owl:AsymmetricProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasProcessDataState"^^xsd:string ;
+    rdfs:comment "Generalized property to connect a process to a dynamic, version of its process data."^^xsd:string ;
+    rdfs:domain ioc:Process ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessDataState .
+
+ioc:hasValue a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "hasValue"^^xsd:string ;
+    rdfs:comment "Generic Property to connect ProcessDataStates, which can be versioned, to the actual classes that describe ProcessData."^^xsd:string ;
+    rdfs:domain ioc:ProcessDataState ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:range ioc:ProcessData .
+
+ioc:Process a owl:Class ;
+    rdfs:label "Process"^^xsd:string ;
+    rdfs:comment "The generic class process serves as the central element of the construction process ontology. It can represent a classical process or a subfield common in some definitions such as an activity or a task. Due to the problem of the subjectivity of classifications of the term, no further distinction will be made here."^^xsd:string ;
+    rdfs:isDefinedBy ioc: .
+
+ioc:ProcessDataState a owl:Class ;
+    rdfs:label "ProcessDataState"^^xsd:string ;
+    rdfs:comment "Intermediate Node which helps to add metadata to the object property connecting the Process to its sepcific ProcessData"^^xsd:string ;
+    rdfs:isDefinedBy ioc: ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:maxQualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+            owl:onClass ioc:Location ;
+            owl:onProperty ioc:hasLocationValue ],
+        [ a owl:Restriction ;
+            owl:maxQualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+            owl:onClass ioc:Schedule ;
+            owl:onProperty ioc:hasScheduleValue ],
+        [ a owl:Restriction ;
+            owl:maxQualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+            owl:onClass ioc:Status ;
+            owl:onProperty ioc:hasStatusValue ],
+        [ a owl:Restriction ;
+            owl:maxQualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+            owl:onClass ioc:Space ;
+            owl:onProperty ioc:hasTargetSpaceValue ],
+        [ a owl:Restriction ;
+            owl:maxQualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+            owl:onClass ioc:Space ;
+            owl:onProperty ioc:hasInitialSpaceValue ] .
+
+[] a owl:AllDisjointProperties ;
+    owl:members ( ioc:hasActorValue ioc:hasCapabilityRequirementValue ioc:hasCapabilityValue ioc:hasElementValue ioc:hasInitialSpaceValue ioc:hasInputElementValue ioc:hasInputInformationValue ioc:hasLocationValue ioc:hasMethodValue ioc:hasOutputElementValue ioc:hasOutputInformationValue ioc:hasResourceValue ioc:hasScheduleValue ioc:hasStatusValue ioc:hasTargetSpaceValue ioc:isContainedInValue ) .
+
+[] a owl:AllDisjointProperties ;
+    owl:members ( ioc:hasActor ioc:hasCapabilityRequirement ioc:hasInitialSpace ioc:hasInputElement ioc:hasInputInformation ioc:hasMethod ioc:hasOutputElement ioc:hasOutputInformation ioc:hasResource ioc:hasSchedule ioc:hasStatus ioc:hasTargetSpace ) .
+

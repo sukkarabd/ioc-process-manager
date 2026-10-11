@@ -1,0 +1,336 @@
+{
+  "csv": {
+    "report": {
+      "format": "csv",
+      "sourceFields": [
+        "process_id",
+        "name",
+        "method",
+        "actor",
+        "actor_org",
+        "start_date",
+        "end_date",
+        "predecessors",
+        "resources",
+        "input_materials",
+        "output_elements",
+        "space",
+        "status",
+        "progress",
+        "notes"
+      ],
+      "mappedFields": {
+        "process_id": "process_id",
+        "name": "name",
+        "method": "method",
+        "actor": "actor",
+        "actor_org": "actor_org",
+        "start_date": "start_date",
+        "end_date": "end_date",
+        "predecessors": "predecessors",
+        "resources": "resources",
+        "input_materials": "input_materials",
+        "output_elements": "output_elements",
+        "space": "space",
+        "status": "status",
+        "progress": "progress",
+        "notes": "notes"
+      },
+      "unmappedSourceFields": [],
+      "lostInformation": [],
+      "warnings": [],
+      "targetCoverage": {
+        "covered": [
+          "process_id",
+          "name",
+          "method",
+          "actor",
+          "actor_org",
+          "start_date",
+          "end_date",
+          "predecessors",
+          "resources",
+          "input_materials",
+          "output_elements",
+          "space",
+          "status",
+          "progress",
+          "notes"
+        ],
+        "missing": [
+          "parent"
+        ],
+        "ratio": 0.938
+      },
+      "counts": {
+        "processes": 38,
+        "summaryProcesses": 0,
+        "dependencies": 51,
+        "actors": 14,
+        "resources": 52,
+        "materials": 81,
+        "locations": 16,
+        "triples": 2813
+      }
+    },
+    "validation": {
+      "conforms": true,
+      "tboxVersion": "0.5.1",
+      "triples": 2813,
+      "violations": 0,
+      "byRule": {
+        "R1 undeclared IoC term": 0,
+        "R2 instance in IoC namespace": 0,
+        "R3 datatype range": 0,
+        "R4 domain": 0,
+        "R5 range": 0,
+        "R6 functional property": 0,
+        "R7 disjoint classes": 0
+      },
+      "applicationExtensionTerms": [
+        "ext:Project",
+        "ext:importedAt",
+        "ext:progress",
+        "ext:projectName",
+        "ext:sourceFormat"
+      ],
+      "note": "Axioms of the IoC TBox checked under a closed-world reading."
+    },
+    "agreement": null
+  },
+  "xlsx": {
+    "report": {
+      "format": "xlsx",
+      "sourceFields": [
+        "PROCESS ID",
+        "NAME",
+        "METHOD",
+        "ACTOR",
+        "ACTOR ORG",
+        "START DATE",
+        "END DATE",
+        "PREDECESSORS",
+        "RESOURCES",
+        "INPUT MATERIALS",
+        "OUTPUT ELEMENTS",
+        "SPACE",
+        "STATUS",
+        "PROGRESS",
+        "NOTES"
+      ],
+      "mappedFields": {
+        "PROCESS ID": "process_id",
+        "NAME": "name",
+        "METHOD": "method",
+        "ACTOR": "actor",
+        "ACTOR ORG": "actor_org",
+        "START DATE": "start_date",
+        "END DATE": "end_date",
+        "PREDECESSORS": "predecessors",
+        "RESOURCES": "resources",
+        "INPUT MATERIALS": "input_materials",
+        "OUTPUT ELEMENTS": "output_elements",
+        "SPACE": "space",
+        "STATUS": "status",
+        "PROGRESS": "progress",
+        "NOTES": "notes",
+        "(phase rows)": "parent \u2192 ioc:hasParent"
+      },
+      "unmappedSourceFields": [],
+      "lostInformation": [],
+      "warnings": [],
+      "sheet": "PROJECT_DATA",
+      "targetCoverage": {
+        "covered": [
+          "process_id",
+          "name",
+          "method",
+          "actor",
+          "actor_org",
+          "start_date",
+          "end_date",
+          "predecessors",
+          "resources",
+          "input_materials",
+          "output_elements",
+          "space",
+          "status",
+          "progress",
+          "notes",
+          "parent"
+        ],
+        "missing": [],
+        "ratio": 1.0
+      },
+      "counts": {
+        "processes": 38,
+        "summaryProcesses": 4,
+        "dependencies": 51,
+        "actors": 14,
+        "resources": 52,
+        "materials": 81,
+        "locations": 16,
+        "triples": 2867
+      }
+    },
+    "validation": {
+      "conforms": true,
+      "tboxVersion": "0.5.1",
+      "triples": 2867,
+      "violations": 0,
+      "byRule": {
+        "R1 undeclared IoC term": 0,
+        "R2 instance in IoC namespace": 0,
+        "R3 datatype range": 0,
+        "R4 domain": 0,
+        "R5 range": 0,
+        "R6 functional property": 0,
+        "R7 disjoint classes": 0
+      },
+      "applicationExtensionTerms": [
+        "ext:Project",
+        "ext:importedAt",
+        "ext:isSummary",
+        "ext:progress",
+        "ext:projectName",
+        "ext:sourceFormat"
+      ],
+      "note": "Axioms of the IoC TBox checked under a closed-world reading."
+    },
+    "agreement": {
+      "status": 1.0,
+      "progress": 1.0,
+      "start": 1.0,
+      "end": 1.0,
+      "actor": 1.0,
+      "organisation": 1.0,
+      "predecessors": 1.0,
+      "resources": 1.0,
+      "materials": 1.0,
+      "outputs": 1.0,
+      "method": 1.0,
+      "space": 1.0,
+      "notes": 1.0,
+      "parent": 0.0
+    }
+  },
+  "mspdi": {
+    "report": {
+      "format": "mspdi",
+      "sourceFields": [
+        "ActualFinish",
+        "ActualStart",
+        "Assignment",
+        "Finish",
+        "ID",
+        "Name",
+        "Notes",
+        "OutlineLevel",
+        "OutlineNumber",
+        "PercentComplete",
+        "PredecessorLink",
+        "Resource.Group",
+        "Resource.Name",
+        "Resource.Type",
+        "Start",
+        "Summary",
+        "UID"
+      ],
+      "mappedFields": {
+        "UID": "process_id",
+        "Name": "name",
+        "Start": "start_date",
+        "Finish": "end_date",
+        "PercentComplete": "progress + status",
+        "ActualStart": "status",
+        "ActualFinish": "status",
+        "Notes": "notes",
+        "PredecessorLink": "predecessors",
+        "OutlineNumber": "parent",
+        "Summary": "summary flag",
+        "Resource.Name": "actor / resources / input_materials",
+        "Resource.Type": "routing (work vs material)",
+        "Resource.Group": "actor_org / equipment",
+        "Assignment": "task \u2194 resource link"
+      },
+      "unmappedSourceFields": [],
+      "lostInformation": [
+        "MS Project has no native fields for method, space or output elements"
+      ],
+      "warnings": [],
+      "targetCoverage": {
+        "covered": [
+          "process_id",
+          "name",
+          "actor",
+          "actor_org",
+          "start_date",
+          "end_date",
+          "predecessors",
+          "resources",
+          "input_materials",
+          "status",
+          "progress",
+          "notes",
+          "parent"
+        ],
+        "missing": [
+          "method",
+          "output_elements",
+          "space"
+        ],
+        "ratio": 0.812
+      },
+      "counts": {
+        "processes": 38,
+        "summaryProcesses": 4,
+        "dependencies": 51,
+        "actors": 14,
+        "resources": 52,
+        "materials": 81,
+        "locations": 0,
+        "triples": 2217
+      }
+    },
+    "validation": {
+      "conforms": true,
+      "tboxVersion": "0.5.1",
+      "triples": 2217,
+      "violations": 0,
+      "byRule": {
+        "R1 undeclared IoC term": 0,
+        "R2 instance in IoC namespace": 0,
+        "R3 datatype range": 0,
+        "R4 domain": 0,
+        "R5 range": 0,
+        "R6 functional property": 0,
+        "R7 disjoint classes": 0
+      },
+      "applicationExtensionTerms": [
+        "ext:Project",
+        "ext:importedAt",
+        "ext:isSummary",
+        "ext:progress",
+        "ext:projectName",
+        "ext:sourceFormat"
+      ],
+      "note": "Axioms of the IoC TBox checked under a closed-world reading."
+    },
+    "agreement": {
+      "status": 1.0,
+      "progress": 1.0,
+      "start": 1.0,
+      "end": 1.0,
+      "actor": 1.0,
+      "organisation": 1.0,
+      "predecessors": 1.0,
+      "resources": 1.0,
+      "materials": 1.0,
+      "outputs": 0.0,
+      "method": 0.0,
+      "space": 0.0,
+      "notes": 1.0,
+      "parent": 0.0
+    }
+  }
+}

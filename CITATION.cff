@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software or the Thornfield Court test scenario, please cite it as below."
+title: "IoC Process Manager: source code, Thornfield Court test scenario, and evaluation scripts"
+type: software
+authors:
+  - family-names: Souccar
+    given-names: Abdullah
+    affiliation: "RWTH Aachen University, Chair of Individualized Production"
+version: "3.0.0"
+date-released: "2026-10-11"
+license: MIT
+keywords:
+  - construction scheduling
+  - ontology
+  - Internet of Construction Process Ontology
+  - RDF
+  - delay propagation
