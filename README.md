@@ -117,6 +117,12 @@ IoC 0.5.1 has one kind of schedule: `prov:startedAtTime` / `prov:endedAtTime` on
 
 All of it is part of the ABox and therefore of the Turtle export.
 
+## Changes in v3.1.1
+
+Fix found in the walkthrough on v3.1.0: after "Record as new plan" or a status change, the process
+panel and the Process Board reloaded and the confirmation message disappeared; they now stay
+visible while the data reload (frontend only; SQ1/SQ2 results unchanged).
+
 ## Changes in v3.1 (formative iteration after the walkthrough)
 
 1. Presets parameterised (actor / process / date / phase as drop-downs; no fixed values in the

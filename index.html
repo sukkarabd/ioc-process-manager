@@ -530,7 +530,7 @@ function ProcessBoard({projId,projName,globalTick,onMutate,statusDate}){
   };
   const pct=stats.total?Math.round(stats.finished/stats.total*100):0;
 
-  if(loading)return <Loading/>;
+  if(loading&&!data)return <Loading/>;   // keep the board (and an open process panel) while it reloads
 
   return(
     <div>
@@ -619,7 +619,7 @@ function ProcessPanel({projId,procId,allProcs,onClose,onRefresh,onMutate,statusD
     onRefresh();onClose();
   }
 
-  if(loading)return(
+  if(loading&&!data)return(   // keep the panel (and messages in it) while it reloads after a change
     <><div className="panel-overlay" onClick={onClose}/>
     <div className="side-panel"><Loading/></div></>
   );
