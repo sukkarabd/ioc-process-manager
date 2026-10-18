@@ -1,15 +1,15 @@
-FR,requirement,route (view / preset / custom SPARQL / not answerable),view or preset used,interaction steps from process board,notes
-FR4,Unfinished processes of Maria Okonkwo,,q01,,v3.1: value chosen from drop-down (preset parameter)
-FR5,Processes that can start next,,q05,,
-FR6,Blocked processes and blockers,,q06,,
-FR7,Transitive successors of 'Drainage — Below Ground Foul & Surface Water',,q07,,v3.1: value chosen from drop-down (preset parameter)
-FR8,Prerequisites of 'Structural Screed Topping — Floors 1-3' finished?,,q08,,v3.1: value chosen from drop-down (preset parameter)
-FR9,Overdue on 2025-10-01,,q10,,v3.1: value chosen from drop-down (preset parameter)
-FR10,Materials for processes starting Sep–Oct 2025,,q13,,v3.1: value chosen from drop-down (preset parameter)
-FR11,Status history of 'Thermal & Acoustic Insulation — Floors & Partitions',,q18,,v3.1: value chosen from drop-down (preset parameter)
-FR12,Processes per location,,q16,,
-FR13,"Completion: (a) project, (b) per phase, (c) per actor",,"Process Board: progress card (per phase / per actor); presets q04, q17",,
-FR14,Impact if '1st Fix Plumbing — Pipework & Waste' is 21 days late,,API /impact,,
-FR15,Late processes on 2025-10-01 and their knock-on effect,,API /delays,,
-FR16,Record a status change of 'Thermal & Acoustic Insulation — Floors & Partitions' as a new version,,process panel / API status,,
-FR17,Apply the 21-day delay of '1st Fix Plumbing — Pipework & Waste' as a re-plan,,delay impact / API /impact/apply,,
+FR,requirement,route (view / preset / custom SPARQL / not answerable),view or preset used,steps CSV,steps Excel,steps MS Project,answer observed,notes
+FR4,Unfinished processes of Maria Okonkwo,view,Process Board: filter by actor,1,1,1,3 open (planned) of 5 listed,alternative: preset q01 with actor drop-down (3 steps)
+FR5,Processes that can start next,preset,q05 (Can start next),2,2,2,S0: no process (correct),runs on selection; no Run click needed in v3.1
+FR6,Blocked processes and their blockers,preset,q06 (Blocked processes),2,2,2,16 blocking relations (10 processes),number of blocked processes on the board tile at 0 steps; dependency graph shows red edges
+FR7,Direct and indirect successors of 'Drainage — Below Ground Foul & Surface Water',preset,q07 + process drop-down,3,3,3,"23 processes, marked direct/indirect",2 steps when the default process is the one wanted
+FR8,Prerequisites of 'Structural Screed Topping — Floors 1-3' finished?,view,Process panel (ioc:hasPredecessor with status),2,2,2,"1 predecessor, finished",filter + open process; alternative q08 (3 steps)
+FR9,Overdue processes on 2025-10-01,view,Delay Watch + status date,2,2,2,"5 overdue ('should have finished'), 1 further late process not started","preset q10 + date: 3 steps, 5 results"
+FR10,Materials for processes starting Sep–Oct 2025,preset,q13 + two dates,4,4,4,CSV/Excel 25 rows; MS Project 25 rows,2 steps with the default period
+FR11,Status history of 'Thermal & Acoustic Insulation — Floors & Partitions',view,Process panel: planned vs actual + History,3,3,3,baseline / plan / actual and all status and schedule states,preset q18 + process drop-down: 3 steps
+FR12,Processes per location,preset,q16,2,2,not answerable,"16 locations (CSV, Excel); no locations in MS Project",format limitation
+FR13,"Completion: (a) project, (b) per phase, (c) per actor",view,Process Board: progress card,0,0,0,25 of 38 finished (66 %); 4 phases; 14 actors,(b) not answerable for CSV (no phases; card says so); (c) 1 click on 'per actor'
+FR14,Impact if '1st Fix Plumbing — Pipework & Waste' is 21 days late,view,Process panel: delay impact,4,4,4,"9 later processes, 7 people, completion 22 Dec → 26 Dec 2025 (+4 d)",
+FR15,Late processes on 2025-10-01 and their knock-on effect,view,Delay Watch + status date,2,2,2,"6 late, 5 knock-on, completion unchanged",
+FR16,Record a status change as a new version,view,Process panel: 'Happened on' date + status,4,4,4,new status state; history shows 2 states,3 steps if the default date is kept
+FR17,Apply the 21-day delay of '1st Fix Plumbing' as a re-plan,view,Process panel: delay impact → Record as new plan (+ confirmation),6,6,6,10 processes re-planned; baseline kept,"Delay Watch route (record forecast): 4 steps. Walkthrough finding W6: confirmation message disappeared in v3.1.0, fixed in v3.1.1"
