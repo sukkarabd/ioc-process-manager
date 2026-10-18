@@ -1,6 +1,6 @@
 """
-server_fastapi.py — IoC Process Manager (v3)
-=============================================
+server_fastapi.py — IoC Process Manager (v3.1)
+===============================================
 FastAPI backend that separates the knowledge base into
   * TBox — the IoC ontology v0.5.1 (ioc_tbox.ttl, loaded read-only at start-up)
   * ABox — one RDF graph of project instance data per project (./projects/*.ttl)
@@ -20,11 +20,13 @@ What remains hardcoded (by design, documented in the thesis):
   * the source-to-IoC mapping (which column goes to which property path)
   * the translation between status labels and the five IoC boolean flags
   * the scheduling logic of the delay propagation (IoC has no link types or lags)
-  * the SPARQL preset queries (tagged with the requirements FR4–FR15 of the thesis)
+  * the SPARQL preset queries (tagged with the requirements FR4–FR15 of the thesis);
+    since v3.1 their actor / process / date / phase values are parameters that the
+    GUI offers as drop-down lists filled from the project data (no fixed values)
   * the task-oriented views of the GUI
 
 Application-specific terms that IoC does not define (progress, project name,
-summary flag) live in a separate namespace (EXT) so that the IoC TBox is
+summary flag, actual start/finish, effective date of a status change) live in a separate namespace (EXT) so that the IoC TBox is
 not modified and the extension stays visible.
 
 Run:
@@ -61,7 +63,7 @@ EXT   = Namespace("urn:iocpm:ext#")        # application vocabulary, NOT part of
 
 # ── App setup ───────────────────────────────────────────────────────────────
 
-app = FastAPI(title="IoC Process Manager", version="3.0")
+app = FastAPI(title="IoC Process Manager", version="3.1")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 BASE_DIR   = Path(__file__).resolve().parent
@@ -144,6 +146,11 @@ class StatusUpdateRequest(BaseModel):
     status: str
     progress: Optional[int] = None
     by: Optional[str] = None          # optional actor label → ioc:generatedByActor
+    date: Optional[str] = None        # YYYY-MM-DD the change actually happened (default: today);
+                                      # recorded as ext:effectiveDate, ≠ prov:generatedAtTime (time of recording)
+
+class PresetRunRequest(BaseModel):
+    params: Dict[str, str] = {}
 
 class SparqlQueryRequest(BaseModel):
     query: str
@@ -325,18 +332,35 @@ def _read_progress(g: Graph, proc) -> Optional[int]:
                 return int(lit.toPython())
     return None
 
+def _date_lit(d: date) -> Literal:
+    return Literal(f"{d.isoformat()}T00:00:00", datatype=XSD.dateTime)
+
+def _read_actuals(g: Graph, proc) -> Tuple[Optional[date], Optional[date]]:
+    """Actual start / finish (ext:actualStart, ext:actualEnd) carried on the current status value.
+    IoC 0.5.1 has no planned/actual distinction: prov:startedAtTime/endedAtTime (domain
+    ioc:Schedule) hold the PLAN; actual dates are therefore an application extension."""
+    node = _current_value(g, proc, IOC.hasStatus, IOC.hasStatusValue)
+    if node is None:
+        return None, None
+    return _d(g.value(node, EXT.actualStart)), _d(g.value(node, EXT.actualEnd))
+
 def _write_status(g: Graph, pid: str, proc, status: str, progress: Optional[int] = None,
-                  by: Optional[str] = None) -> bool:
+                  by: Optional[str] = None, effective: Optional[date] = None,
+                  actual: Tuple[Optional[date], Optional[date]] = (None, None)) -> bool:
     """Create a NEW current status state; the previous state is kept as history
     (retyped to ioc:ProcessDataState, prov:invalidatedAtTime, linked via prov:wasRevisionOf).
-    Returns False if nothing changed."""
+    `effective` = the date the change happened (ext:effectiveDate); it becomes the actual
+    start when a process starts and the actual finish when it finishes. Actual dates are
+    carried forward to later states. Returns False if nothing changed."""
     flags = _status_flags(status)
     old_pds = next(iter(_current_states(g, proc, IOC.hasStatus)), None)
-    old_prog = None
+    old_prog, old_as, old_ae = None, None, None
     if old_pds is not None:
         old_node = g.value(old_pds, IOC.hasStatusValue)
         old_flags = _flags_of(g, old_node) if old_node is not None else {}
         old_prog = g.value(old_node, EXT.progress) if old_node is not None else None
+        if old_node is not None:
+            old_as, old_ae = _d(g.value(old_node, EXT.actualStart)), _d(g.value(old_node, EXT.actualEnd))
         same_flags = all(old_flags.get(f) == flags[f] for f in STATUS_FLAGS)
         same_prog = progress is None or (old_prog is not None and int(old_prog) == progress)
         if same_flags and same_prog:
@@ -348,6 +372,19 @@ def _write_status(g: Graph, pid: str, proc, status: str, progress: Optional[int]
     if progress is None:
         progress = 100 if flags["isFinished"] else (int(old_prog) if old_prog is not None else 0)
     g.add((node, EXT.progress, Literal(int(progress), datatype=XSD.integer)))
+    # actual dates: explicit (import) > carried forward > the effective date of this change
+    a_start = actual[0] or (old_as if flags["isStarted"] else None)
+    a_end = actual[1] or (old_ae if flags["isFinished"] else None)
+    if effective is not None:
+        g.add((node, EXT.effectiveDate, _date_lit(effective)))
+        if flags["isStarted"] and a_start is None and not flags["isFinished"]:
+            a_start = effective
+        if flags["isFinished"] and a_end is None:
+            a_end = effective
+    if a_start and flags["isStarted"]:
+        g.add((node, EXT.actualStart, _date_lit(a_start)))
+    if a_end and flags["isFinished"]:
+        g.add((node, EXT.actualEnd, _date_lit(a_end)))
     return True
 
 # ── Schedule: read and versioned write ──────────────────────────────────────
@@ -539,6 +576,7 @@ def parse_mspdi(data: bytes) -> Tuple[list, dict]:
         status = "finished" if pct >= 100 else "started" if (pct > 0 or t(x, "ActualStart")) else "planned"
         row = {"process_id": f"T{uid}", "name": t(x, "Name"),
                "start_date": t(x, "Start"), "end_date": t(x, "Finish"),
+               "actual_start": t(x, "ActualStart"), "actual_end": t(x, "ActualFinish"),
                "status": status, "progress": str(pct), "notes": t(x, "Notes"),
                "predecessors": [], "resources": [], "input_materials": [], "output_elements": []}
         on = t(x, "OutlineNumber")
@@ -636,7 +674,8 @@ def rows_to_graph(rows: list, project_name: str, pid: str, report: dict) -> Tupl
         if status not in STATUS_VALUES:
             report["warnings"].append(f"Row {i + 1}: unknown status '{status}' → planned")
             status = "planned"
-        _write_status(g, pid, proc, status, progress)
+        _write_status(g, pid, proc, status, progress,
+                      actual=(_d(row.get("actual_start") or None), _d(row.get("actual_end") or None)))
 
         def link(prop, vprop, value_uri, cls, label, tag):
             pds = URIRef(f"{base}{sid}_{tag}_pds")
@@ -726,7 +765,10 @@ def csv_to_graph(csv_text: str, project_name: str, pid: str):
 #
 # so that a zero delay never moves anything, even where the baseline schedule
 # overlaps a predecessor (then gap = 0 and a delay is passed on in full).
-# Finished and cancelled processes are never moved; durations are preserved.
+# Finished and cancelled processes are never moved. A process that has not started
+# keeps its duration (start and finish move together); a process that has already
+# started keeps its (past) start and only its finish moves (v3.1 — before, its start
+# was moved as well, which is impossible for work already under way).
 # SPARQL 1.1 can find all (transitive) successors, but it cannot compute this
 # longest-path recursion, which is why it is computed here and exposed via the API.
 
@@ -734,11 +776,14 @@ def _schedule_net(g: Graph) -> dict:
     net = {}
     for p in _processes(g):
         s, e = _schedule_dates(g, p)
+        bs, be = _schedule_dates(g, p, current=False)
         st = _read_status(g, p)
         a = _current_value(g, p, IOC.hasActor, IOC.hasActorValue)
-        net[p] = {"start": s, "end": e, "preds": [x for x in g.objects(p, IOC.hasPredecessor)],
+        net[p] = {"start": s, "end": e, "bstart": bs, "bend": be,
+                  "preds": [x for x in g.objects(p, IOC.hasPredecessor)],
                   "succs": [x for x in g.subjects(IOC.hasPredecessor, p)],
                   "done": st["isFinished"] or st["isCancelled"], "status": st["label"],
+                  "started": st["isStarted"] and not st["isFinished"],
                   "label": str(g.value(p, RDFS.label) or p),
                   "id": str(g.value(p, IOC.hasInternalProcessMark) or str(p).split(":")[-1]),
                   "actor": str(g.value(a, RDFS.label)) if a is not None else None,
@@ -780,19 +825,40 @@ def propagate(net: dict, initial: dict) -> dict:
             shift[s] = cand
     return shift
 
+def _new_dates(v: dict, d: int) -> Tuple[Optional[date], Optional[date], str]:
+    """Started processes keep their start and are extended; others move as a whole."""
+    end = v["end"] + timedelta(days=d) if v["end"] else None
+    if v["started"]:
+        return v["start"], end, "finish extended (already started)"
+    return (v["start"] + timedelta(days=d) if v["start"] else None), end, "moved"
+
+def _fmt(d: Optional[date]) -> Optional[str]:
+    return d.isoformat() if d else None
+
 def _impact_report(net: dict, shift: dict, sources: dict) -> dict:
     ends = [v["end"] for v in net.values() if v["end"]]
     old_end = max(ends) if ends else None
     new_end = max((v["end"] + timedelta(days=shift.get(p, 0)) for p, v in net.items() if v["end"]), default=None)
+    bends = [v["bend"] for v in net.values() if v["bend"]]
+    base_end = max(bends) if bends else None
     affected = []
-    for p, d in sorted(shift.items(), key=lambda kv: (net[kv[0]]["start"] or date.max, net[kv[0]]["label"])):
+    for p, d in sorted(shift.items(), key=lambda kv: (kv[0] not in sources, net[kv[0]]["start"] or date.max, net[kv[0]]["label"])):
         v = net[p]
+        ns, ne, mode = _new_dates(v, d)
+        # why this shift: the predecessor that drives it, and how much of its delay the float absorbed
+        driver, incoming, flt = None, None, None
+        if p not in sources:
+            cands = [(shift.get(q, 0) - _gap(net, q, p), q) for q in v["preds"] if q in net and shift.get(q, 0) > 0]
+            if cands:
+                _, q = max(cands, key=lambda x: x[0])
+                driver, incoming, flt = net[q]["label"], shift[q], _gap(net, q, p)
         affected.append({"uri": str(p), "id": v["id"], "label": v["label"], "actor": v["actor"], "organisation": v["org"],
-                         "status": v["status"], "shiftDays": d, "source": p in sources,
-                         "oldStart": v["start"].isoformat() if v["start"] else None,
-                         "oldEnd": v["end"].isoformat() if v["end"] else None,
-                         "newStart": (v["start"] + timedelta(days=d)).isoformat() if v["start"] else None,
-                         "newEnd": (v["end"] + timedelta(days=d)).isoformat() if v["end"] else None})
+                         "status": v["status"], "shiftDays": d, "source": p in sources, "mode": mode,
+                         "drivenBy": driver, "incomingDays": incoming, "absorbedDays": (incoming - d) if incoming else 0,
+                         "floatDays": flt,
+                         "oldStart": _fmt(v["start"]), "oldEnd": _fmt(v["end"]),
+                         "newStart": _fmt(ns), "newEnd": _fmt(ne),
+                         "baselineEnd": _fmt(v["bend"])})
     reach, stack = set(), list(sources)
     while stack:
         for s in net[stack.pop()]["succs"]:
@@ -805,21 +871,32 @@ def _impact_report(net: dict, shift: dict, sources: dict) -> dict:
         if a["source"] or not a["actor"]:
             continue
         x = actors.setdefault(a["actor"], {"actor": a["actor"], "organisation": a["organisation"],
-                                           "processes": 0, "maxShiftDays": 0, "firstAffectedStart": a["oldStart"]})
+                                           "processes": 0, "maxShiftDays": 0, "firstAffectedStart": a["oldStart"],
+                                           "firstProcess": a["label"], "firstNewStart": a["newStart"]})
         x["processes"] += 1
         x["maxShiftDays"] = max(x["maxShiftDays"], a["shiftDays"])
         if a["oldStart"] and (x["firstAffectedStart"] is None or a["oldStart"] < x["firstAffectedStart"]):
-            x["firstAffectedStart"] = a["oldStart"]
+            x["firstAffectedStart"], x["firstProcess"], x["firstNewStart"] = a["oldStart"], a["label"], a["newStart"]
     return {"sources": [{"id": net[p]["id"], "label": net[p]["label"], "delayDays": d} for p, d in sources.items()],
             "affected": affected,
             "affectedCount": sum(1 for a in affected if not a["source"]),
             "absorbedByFloat": absorbed,
             "actorsToInform": sorted(actors.values(), key=lambda x: x["firstAffectedStart"] or ""),
-            "projectEnd": {"old": old_end.isoformat() if old_end else None,
-                           "new": new_end.isoformat() if new_end else None,
-                           "shiftDays": (new_end - old_end).days if old_end and new_end else 0},
-            "assumptions": "finish-to-start links, calendar days, durations preserved; "
-                           "finished and cancelled processes are not moved"}
+            "projectEnd": {"baseline": _fmt(base_end), "old": _fmt(old_end), "new": _fmt(new_end),
+                           "shiftDays": (new_end - old_end).days if old_end and new_end else 0,
+                           "vsBaselineDays": (new_end - base_end).days if base_end and new_end else 0},
+            "assumptions": "finish-to-start links, calendar days; processes not yet started keep their duration, "
+                           "started processes keep their start and finish later; finished and cancelled processes are not moved"}
+
+def _apply_shifts(g: Graph, pid: str, rep: dict, by: str) -> int:
+    """Re-plan: new current ioc:Schedule state for every process in the report (baseline kept)."""
+    n = 0
+    for a in rep["affected"]:
+        if a["newStart"] and a["newEnd"]:
+            _write_schedule(g, pid, URIRef(a["uri"]), date.fromisoformat(a["newStart"]),
+                            date.fromisoformat(a["newEnd"]), by)
+            n += 1
+    return n
 
 def _resolve_delay(net, proc, req: ImpactRequest) -> int:
     if req.delayDays is None and not req.newEndDate:
@@ -854,17 +931,22 @@ def status_date_default(g: Graph) -> date:
 
 def current_delays(g: Graph, ref: date) -> dict:
     """Processes that are late at the reference date and their combined knock-on effect.
-    Late = not finished/cancelled and (planned end < ref, or not started although planned start < ref).
-    A late process cannot finish before ref, so its minimum delay is ref − planned end."""
+    Late = not finished/cancelled and
+      * not started although the planned start is before ref → it cannot start before ref,
+        so its minimum delay is ref − planned start (v3.1: this rule now comes first; before,
+        a not-started process whose planned END had passed got only ref − planned end,
+        which under-estimated the delay and left it "late" again after a re-plan), or
+      * started, but the planned end is before ref → it cannot finish before ref,
+        so its minimum delay is ref − planned end."""
     net = _schedule_net(g)
     initial, late = {}, []
     for p, v in net.items():
         if v["done"] or v["end"] is None:
             continue
-        if v["end"] < ref:
-            d, why = (ref - v["end"]).days, "planned end passed"
-        elif v["status"] in ("Planned", "Ready") and v["start"] and v["start"] < ref:
+        if v["status"] in ("Planned", "Ready") and v["start"] and v["start"] < ref:
             d, why = (ref - v["start"]).days, "planned start passed, not started"
+        elif v["end"] < ref:
+            d, why = (ref - v["end"]).days, "planned end passed"
         else:
             continue
         initial[p] = d
@@ -982,9 +1064,11 @@ def _extract_proc(g: Graph, proc) -> dict:
                 schedule["durationDays"] = (date.fromisoformat(str(end)[:10]) - date.fromisoformat(str(start)[:10])).days
             except ValueError:
                 pass
-        _, bend = _schedule_dates(g, proc, current=False)
+        bstart, bend = _schedule_dates(g, proc, current=False)
+        schedule["baselineStart"] = bstart.isoformat() if bstart else None
         schedule["baselineEnd"] = bend.isoformat() if bend else None
         schedule["slipDays"] = (_d(end) - bend).days if bend and _d(end) else 0
+    a_start, a_end = _read_actuals(g, proc)
 
     actor = single(IOC.hasActor, IOC.hasActorValue)
     if actor:
@@ -1002,6 +1086,8 @@ def _extract_proc(g: Graph, proc) -> dict:
         "uri": str(proc), "label": _label(g, proc),
         "internalMark": str(g.value(proc, IOC.hasInternalProcessMark) or ""),
         "status": status, "progress": progress, "actor": actor,
+        "actualStart": _fmt(a_start),
+        "actualEnd": _fmt(a_end),
         "method": single(IOC.hasMethod, IOC.hasMethodValue), "schedule": schedule,
         "resources": multi(IOC.hasResource, IOC.hasResourceValue),
         "inputElements": multi(IOC.hasInputElement, IOC.hasInputElementValue, True),
@@ -1111,8 +1197,10 @@ async def get_status_history(pid: str, proc_id: str):
         node = g.value(pds, IOC.hasStatusValue)
         by = g.value(pds, IOC.generatedByActor)
         prog = g.value(node, EXT.progress) if node is not None else None
+        eff = g.value(node, EXT.effectiveDate) if node is not None else None
         out.append({"kind": "status", "pds": str(pds), "current": _is_current(g, pds),
                     "generatedAtTime": str(g.value(pds, PROV.generatedAtTime) or ""),
+                    "effectiveDate": str(eff)[:10] if eff is not None else None,
                     "invalidatedAtTime": str(g.value(pds, PROV.invalidatedAtTime) or "") or None,
                     "status": _flags_of(g, node) if node is not None else None,
                     "progress": int(prog) if prog is not None else None,
@@ -1129,7 +1217,27 @@ async def get_status_history(pid: str, proc_id: str):
                       "by": _label(g, by) if by is not None else None})
     out.sort(key=lambda x: x["generatedAtTime"], reverse=True)
     sched.sort(key=lambda x: x["generatedAtTime"], reverse=True)
-    return {"process": _label(g, proc), "versions": out, "scheduleVersions": sched}
+    return {"process": _label(g, proc), "versions": out, "scheduleVersions": sched,
+            "comparison": _planned_vs_actual(g, proc)}
+
+def _planned_vs_actual(g: Graph, proc) -> dict:
+    """FR11: baseline (first schedule state), current plan, actual dates and the variances.
+    Variance = actual (or, while running, the current plan) minus baseline, in days."""
+    bs, be = _schedule_dates(g, proc, current=False)
+    cs, ce = _schedule_dates(g, proc)
+    a_s, a_e = _read_actuals(g, proc)
+    st = _read_status(g, proc)
+    var = lambda x, y: (x - y).days if x and y else None
+    finish_ref = a_e if st["isFinished"] else ce
+    return {"baselineStart": _fmt(bs), "baselineEnd": _fmt(be),
+            "plannedStart": _fmt(cs), "plannedEnd": _fmt(ce),
+            "actualStart": _fmt(a_s), "actualEnd": _fmt(a_e),
+            "startVarianceDays": var(a_s, bs) if a_s else (var(cs, bs) if not st["isStarted"] else None),
+            "finishVarianceDays": var(finish_ref, be),
+            "finishBasis": "actual" if st["isFinished"] and a_e else "current plan",
+            "status": st["label"],
+            "note": "baseline = first ioc:Schedule state; plan = current ioc:Schedule state; "
+                    "actual dates = ext:actualStart / ext:actualEnd (not defined in IoC 0.5.1)"}
 
 @app.post("/api/projects/{pid}/processes")
 async def add_process(pid: str, req: AddProcessRequest):
@@ -1162,7 +1270,10 @@ async def update_status(pid: str, proc_id: str, req: StatusUpdateRequest):
     target = _find_process(g, proc_id)
     if target is None:
         raise HTTPException(404, "Process not found")
-    changed = _write_status(g, pid, target, req.status, req.progress, req.by)
+    eff = _d(req.date) if req.date else date.today()
+    if req.date and eff is None:
+        raise HTTPException(400, "date must be YYYY-MM-DD")
+    changed = _write_status(g, pid, target, req.status, req.progress, req.by, effective=eff)
     if changed:
         _save_graph(pid, g)
         _save_meta(pid, meta.get("name", pid), len(_processes(g)), meta)
@@ -1214,11 +1325,7 @@ async def apply_impact(pid: str, req: ImpactRequest):
     if proc not in net:
         raise HTTPException(400, "Summary processes cannot be delayed directly")
     rep = delay_impact(g, proc, _resolve_delay(net, proc, req))
-    for a in rep["affected"]:
-        p = URIRef(a["uri"])
-        if a["newStart"] and a["newEnd"]:
-            _write_schedule(g, pid, p, date.fromisoformat(a["newStart"]), date.fromisoformat(a["newEnd"]),
-                            req.by or "IoC Process Manager (delay propagation)")
+    rep["written"] = _apply_shifts(g, pid, rep, req.by or "IoC Process Manager (delay propagation)")
     _save_graph(pid, g)
     _save_meta(pid, meta.get("name", pid), len(_processes(g)), meta)
     rep["applied"] = True
@@ -1236,6 +1343,69 @@ async def get_current_delays(pid: str, request: Request):
     rep = current_delays(g, ref)
     rep["referenceDateSource"] = "query" if qd else "default (today, or day after the last finished process)"
     return rep
+
+@app.post("/api/projects/{pid}/delays/apply")
+async def apply_current_delays(pid: str, request: Request):
+    """Record the forecast of the Delay Watch as a re-plan: late processes and their
+    knock-on successors get new current schedule states (baseline kept), so the delay
+    stays visible at process and project level instead of disappearing with the view."""
+    g, meta = _load_graph(pid), _load_meta(pid)
+    qd = request.query_params.get("date")
+    ref = _d(qd) if qd else status_date_default(g)
+    if ref is None:
+        raise HTTPException(400, "date must be YYYY-MM-DD")
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    rep = current_delays(g, ref)
+    rep["written"] = _apply_shifts(g, pid, rep, (body or {}).get("by") or "IoC Process Manager (Delay Watch)")
+    _save_graph(pid, g)
+    _save_meta(pid, meta.get("name", pid), len(_processes(g)), meta)
+    rep["applied"] = True
+    return rep
+
+def project_progress(g: Graph, ref: Optional[date] = None) -> dict:
+    """FR13 without SPARQL: completion of the project, per phase (ioc:hasParent) and per actor,
+    plus the completion date as baseline / current plan / forecast (current plan + knock-on of
+    the processes that are late at the reference date)."""
+    procs = [_extract_proc(g, p) for p in _processes(g)]
+    def agg(items):
+        n, f = len(items), sum(1 for p in items if p["status"]["isFinished"])
+        return {"total": n, "finished": f, "pct": round(f / n * 100) if n else 0,
+                "avgProgress": round(sum(p["progress"] for p in items) / n) if n else 0}
+    phases, actors = {}, {}
+    for p in procs:
+        if p["parent"]:
+            phases.setdefault(p["parent"]["label"], []).append(p)
+        if p["actor"]:
+            actors.setdefault(p["actor"]["label"], []).append(p)
+    ref = ref or status_date_default(g)
+    fc = current_delays(g, ref)
+    pe = fc["projectEnd"]
+    return {"overall": agg(procs),
+            "hasPhases": bool(phases),
+            "byPhase": [{"phase": k, **agg(v)} for k, v in sorted(phases.items())],
+            "byActor": [{"actor": k, "organisation": (v[0]["actor"] or {}).get("organisation"), **agg(v)}
+                        for k, v in sorted(actors.items())],
+            "completion": {"baseline": pe["baseline"], "currentPlan": pe["old"], "forecast": pe["new"],
+                           "referenceDate": ref.isoformat(), "lateNow": len(fc["late"]),
+                           "planVsBaselineDays": (_d(pe["old"]) - _d(pe["baseline"])).days if pe["baseline"] and pe["old"] else 0,
+                           "forecastVsBaselineDays": pe["vsBaselineDays"]}}
+
+@app.get("/api/projects/{pid}/statusdate")
+async def get_status_date(pid: str):
+    """Default status date (today, or — for a project outside today's date range, such as the
+    synthetic 2025 scenario — the day after the last finished process). Used as default by the
+    GUI for 'happened on' and the Delay Watch."""
+    return {"date": status_date_default(_load_graph(pid)).isoformat()}
+
+@app.get("/api/projects/{pid}/progress")
+async def get_progress(pid: str, request: Request):
+    g = _load_graph(pid)
+    qd = request.query_params.get("date")
+    return project_progress(g, _d(qd) if qd else None)
 
 # ── Views ───────────────────────────────────────────────────────────────────
 
@@ -1301,13 +1471,7 @@ async def run_sparql(pid: str, req: SparqlQueryRequest):
     if re.search(r"\b(INSERT|DELETE|LOAD|CLEAR|DROP|CREATE)\b", req.query, re.I):
         return {"success": False, "variables": [], "results": [], "count": 0,
                 "error": "Only read queries are allowed here; use the status endpoint for updates."}
-    try:
-        result = g.query(req.query)
-        variables = [str(v) for v in result.vars]
-        rows = [{str(v): (str(row[v]) if row[v] is not None else "") for v in result.vars} for row in result]
-        return {"success": True, "variables": variables, "results": rows, "count": len(rows)}
-    except Exception as e:
-        return {"success": False, "variables": [], "results": [], "count": 0, "error": str(e)}
+    return _run_query(g, req.query)
 
 PFX = "\n".join([
     "PREFIX ioc: <http://w3id.org/ioc#>", "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>",
@@ -1323,115 +1487,237 @@ WORK = "?process a ioc:Process ; rdfs:label ?label . FILTER NOT EXISTS { ?proces
 def _q(*body):
     return PFX + "\n\n" + "\n".join(body)
 
+# Parameterised presets (v3.1). Values that differ from question to question (actor,
+# process, date, phase) are NOT written into the query text any more: the query contains a
+# placeholder {{name}}, the GUI offers a drop-down list filled from the project data, and
+# fill_preset() inserts the chosen value as a safely escaped literal. A line that contains the
+# placeholder of an optional parameter left empty is dropped (= "all").
+#   param types: actor   → actor label            e.g. "Maria Okonkwo"
+#                process → ioc:hasInternalProcessMark, chosen by label
+#                date    → xsd:dateTime literal   (YYYY-MM-DD)
+#                phase   → mark of a summary process (optional; empty = all phases)
+# The defaults are the values used in the evaluation scenario; if a default does not exist in
+# the open project, the first option is used.
+
+def _P(name, ptype, label, default="", optional=False):
+    return {"name": name, "type": ptype, "label": label, "default": default, "optional": optional}
+
 SPARQL_PRESETS = [
-    # (id, category, requirement, title, description, query)
-    ("q01", "Status & Progress", "FR4", "Open processes of one actor",
-     "What are my current or next tasks? — edit the actor name",
-     _q("SELECT ?label ?state WHERE {", f"  {WORK}", f"  {CUR_ACTOR}", f"  {CUR_STATUS}",
-        '  ?st ioc:isFinished false ; ioc:isCancelled false .',
-        '  BIND(IF(EXISTS{?st ioc:isStarted true},"started","not started") AS ?state)',
-        '  FILTER(?actorLabel = "Maria Okonkwo")', "} ORDER BY ?label")),
-    ("q02", "Status & Progress", "FR13", "Started, not finished",
-     "isStarted = true ∧ isFinished = false",
-     _q("SELECT ?process ?label WHERE {", f"  {WORK}", f"  {CUR_STATUS}",
-        "  ?st ioc:isStarted true ; ioc:isFinished false .", "} ORDER BY ?label")),
-    ("q03", "Status & Progress", "FR13", "Finished processes", "isFinished = true",
-     _q("SELECT ?process ?label WHERE {", f"  {WORK}", f"  {CUR_STATUS}", "  ?st ioc:isFinished true .", "} ORDER BY ?label")),
-    ("q04", "Status & Progress", "FR13", "Completion per actor", "Finished / total per actor",
-     _q("SELECT ?actorLabel (COUNT(?process) AS ?total) (SUM(IF(?fin, 1, 0)) AS ?finished) WHERE {",
-        f"  {WORK}", f"  {CUR_ACTOR}", f"  {CUR_STATUS}", "  ?st ioc:isFinished ?fin .",
-        "} GROUP BY ?actorLabel ORDER BY ?actorLabel")),
-    ("q05", "Dependencies", "FR5", "Can start next",
-     "Not started, not cancelled, and every predecessor finished — 'What should I do next?'",
-     _q("SELECT ?process ?label ?actorLabel WHERE {", f"  {WORK}", f"  {CUR_STATUS}",
-        "  ?st ioc:isStarted false ; ioc:isCancelled false .",
-        f"  OPTIONAL {{ {CUR_ACTOR} }}",
-        "  FILTER NOT EXISTS {", "    ?process ioc:hasPredecessor ?pre .",
-        "    ?pre ioc:hasStatus ?pp . ?pp ioc:hasStatusValue ?ps . ?ps ioc:isFinished false .",
-        "    FILTER EXISTS { ?pp a ioc:CurrentProcessDataState }", "  }", "} ORDER BY ?label")),
-    ("q06", "Dependencies", "FR6", "Blocked processes",
-     "Not started and waiting for an unfinished predecessor",
-     _q("SELECT ?label ?blockerLabel WHERE {", f"  {WORK}", f"  {CUR_STATUS}", "  ?st ioc:isStarted false .",
-        "  ?process ioc:hasPredecessor ?blocker . ?blocker rdfs:label ?blockerLabel .",
-        "  ?blocker ioc:hasStatus ?bp . ?bp ioc:hasStatusValue ?bs . ?bs ioc:isFinished false .",
-        "  FILTER EXISTS { ?bp a ioc:CurrentProcessDataState }", "} ORDER BY ?label")),
-    ("q07", "Dependencies", "FR7", "All (transitive) successors of a process",
-     "What depends — directly or indirectly — on this process? Edit the label. Uses the property path hasPredecessor+",
-     _q("SELECT DISTINCT ?label WHERE {", '  ?x rdfs:label "Drainage — Below Ground Foul & Surface Water" .',
-        "  ?process ioc:hasPredecessor+ ?x ; rdfs:label ?label .", "} ORDER BY ?label")),
-    ("q08", "Dependencies", "FR8", "Are the prerequisites of a process finished?",
-     "Direct predecessors of one process with their current status",
-     _q("SELECT ?predLabel ?finished WHERE {", '  ?p rdfs:label "Structural Screed Topping — Floors 1-3" ; ioc:hasPredecessor ?pre .',
-        "  ?pre rdfs:label ?predLabel ; ioc:hasStatus ?pp . ?pp ioc:hasStatusValue ?ps . ?ps ioc:isFinished ?finished .",
-        "  FILTER EXISTS { ?pp a ioc:CurrentProcessDataState }", "}")),
-    ("q09", "Dependencies", "", "Direct predecessor relations", "All asserted ioc:hasPredecessor links",
-     _q("SELECT ?label ?predLabel WHERE {", "  ?process a ioc:Process ; rdfs:label ?label ; ioc:hasPredecessor ?p .",
-        "  ?p rdfs:label ?predLabel .", "} ORDER BY ?label")),
-    ("q10", "Schedule", "FR9", "Overdue processes",
-     "Planned end before the reference date but not finished — edit ?today",
-     _q("SELECT ?label ?end ?actorLabel WHERE {", '  BIND("2025-10-01T00:00:00"^^xsd:dateTime AS ?today)',
-        f"  {WORK}", f"  {CUR_SCHED}", "  ?sched prov:endedAtTime ?end .", f"  {CUR_STATUS}",
-        "  ?st ioc:isFinished false ; ioc:isCancelled false .", f"  OPTIONAL {{ {CUR_ACTOR} }}",
-        "  FILTER(?end < ?today)", "} ORDER BY ?end")),
-    ("q11", "Schedule", "", "Processes by start date", "prov:startedAtTime / prov:endedAtTime",
-     _q("SELECT ?label ?start ?end WHERE {", f"  {WORK}", f"  {CUR_SCHED}", "  ?sched prov:startedAtTime ?start .",
-        "  OPTIONAL { ?sched prov:endedAtTime ?end }", "} ORDER BY ?start")),
-    ("q12", "Schedule", "", "Processes without schedule", "Data-quality check",
-     _q("SELECT ?process ?label WHERE {", f"  {WORK}", "  FILTER NOT EXISTS { ?process ioc:hasSchedule ?s }", "}")),
-    ("q13", "Resources & Materials", "FR10", "Materials needed in a period",
-     "Raw material inputs of processes starting in a time window — edit the dates",
-     _q("SELECT ?start ?label ?material WHERE {", f"  {WORK}", f"  {CUR_SCHED}", "  ?sched prov:startedAtTime ?start .",
-        "  ?process ioc:hasInputElement ?e . ?e ioc:hasInputElementValue ?m . ?m a ioc:RawMaterial ; rdfs:label ?material .",
-        '  FILTER(?start >= "2025-09-01T00:00:00"^^xsd:dateTime && ?start < "2025-11-01T00:00:00"^^xsd:dateTime)',
-        "} ORDER BY ?start")),
-    ("q14", "Resources & Materials", "", "Resources and where they are used", "ioc:Resource per process",
-     _q("SELECT ?resource ?label WHERE {", f"  {WORK}",
-        "  ?process ioc:hasResource ?r . ?r ioc:hasResourceValue ?res . ?res rdfs:label ?resource .", "} ORDER BY ?resource")),
-    ("q15", "Resources & Materials", "", "Output elements", "ioc:Element produced by processes",
-     _q("SELECT ?label ?element WHERE {", f"  {WORK}",
-        "  ?process ioc:hasOutputElement ?o . ?o ioc:hasOutputElementValue ?el . ?el rdfs:label ?element .", "}")),
-    ("q16", "Space & Structure", "FR12", "Processes per location", "ioc:hasInitialSpace → ioc:Location",
-     _q("SELECT ?space (COUNT(?process) AS ?n) (GROUP_CONCAT(?label; separator=' | ') AS ?processes) WHERE {", f"  {WORK}",
-        "  ?process ioc:hasInitialSpace ?sp . ?sp ioc:hasInitialSpaceValue ?loc . ?loc rdfs:label ?space .",
-        "} GROUP BY ?space ORDER BY DESC(?n)")),
-    ("q17", "Space & Structure", "FR13", "Completion per phase",
-     "Children of summary processes (ioc:hasParent) — available for XLSX/MS Project imports",
-     _q("SELECT ?phase (COUNT(?process) AS ?total) (SUM(IF(?fin,1,0)) AS ?finished) WHERE {",
-        "  ?process ioc:hasParent ?ph . ?ph rdfs:label ?phase .", f"  {CUR_STATUS}", "  ?st ioc:isFinished ?fin .",
-        "} GROUP BY ?phase ORDER BY ?phase")),
-    ("q18", "Provenance", "FR11", "Status history of a process",
-     "All ProcessDataState versions — the previous states are kept, not overwritten",
-     _q("SELECT ?generated ?invalidated ?current ?started ?finished ?paused ?progress ?by WHERE {",
-        '  ?process rdfs:label "Thermal & Acoustic Insulation — Floors & Partitions" ; ioc:hasStatus ?pds .',
-        "  ?pds prov:generatedAtTime ?generated ; ioc:hasStatusValue ?st .",
-        "  ?st ioc:isStarted ?started ; ioc:isFinished ?finished ; ioc:isPaused ?paused .",
-        "  OPTIONAL { ?st ext:progress ?progress }", "  OPTIONAL { ?pds prov:invalidatedAtTime ?invalidated }",
-        "  OPTIONAL { ?pds ioc:generatedByActor/rdfs:label ?by }",
-        "  BIND(EXISTS { ?pds a ioc:CurrentProcessDataState } AS ?current)", "} ORDER BY DESC(?generated)")),
-    ("q19", "Provenance", "", "Re-planned processes (schedule slip)",
-     "Processes whose current schedule differs from the baseline — result of applied delay propagation",
-     _q("SELECT ?label ?baselineEnd ?currentEnd ?by WHERE {", f"  {WORK}",
-        "  ?process ioc:hasSchedule ?old . ?old ioc:hasScheduleValue ?os . ?os prov:endedAtTime ?baselineEnd .",
-        "  FILTER NOT EXISTS { ?old prov:wasRevisionOf ?any }",
-        f"  {CUR_SCHED}", "  ?sched prov:endedAtTime ?currentEnd .",
-        "  OPTIONAL { ?schpds ioc:generatedByActor/rdfs:label ?by }",
-        "  FILTER(?currentEnd != ?baselineEnd)", "} ORDER BY ?baselineEnd")),
-    ("q20", "Ontology", "", "ProcessDataState chain of one process",
-     "Shows the IoC versioning pattern: Process → PDS → value",
-     _q("SELECT ?prop ?pds ?value ?valueLabel WHERE {", '  ?process rdfs:label "Topographic & Boundary Survey" ; ?prop ?pds .',
-        "  ?pds ?vp ?value . FILTER EXISTS { ?pds a ioc:CurrentProcessDataState }",
-        "  FILTER(?vp != rdf:type && ?vp != prov:generatedAtTime)",
-        "  OPTIONAL { ?value rdfs:label ?valueLabel }", "} ORDER BY ?prop").replace(
-        "PREFIX ext:", "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\nPREFIX ext:")),
-    ("q21", "Ontology", "", "Instances per IoC class", "Asserted rdf:type counts",
-     _q("SELECT ?class (COUNT(DISTINCT ?x) AS ?n) WHERE {", "  ?x a ?class .",
-        '  FILTER(STRSTARTS(STR(?class), "http://w3id.org/ioc#"))', "} GROUP BY ?class ORDER BY DESC(?n)")),
+    dict(id="q01", category="Status & Progress", fr="FR4", title="Open processes of an actor",
+         description="What are my current or next tasks?",
+         params=[_P("actor", "actor", "Actor", "Maria Okonkwo")],
+         query=_q("SELECT ?label ?state WHERE {", f"  {WORK}", f"  {CUR_ACTOR}", f"  {CUR_STATUS}",
+                  '  ?st ioc:isFinished false ; ioc:isCancelled false .',
+                  '  BIND(IF(EXISTS{?st ioc:isStarted true},"started","not started") AS ?state)',
+                  '  FILTER(?actorLabel = {{actor}})', "} ORDER BY ?label")),
+    dict(id="q02", category="Status & Progress", fr="FR13", title="Started, not finished",
+         description="isStarted = true ∧ isFinished = false",
+         query=_q("SELECT ?process ?label WHERE {", f"  {WORK}", f"  {CUR_STATUS}",
+                  "  ?st ioc:isStarted true ; ioc:isFinished false .", "} ORDER BY ?label")),
+    dict(id="q03", category="Status & Progress", fr="FR13", title="Finished processes", description="isFinished = true",
+         query=_q("SELECT ?process ?label WHERE {", f"  {WORK}", f"  {CUR_STATUS}", "  ?st ioc:isFinished true .", "} ORDER BY ?label")),
+    dict(id="q04", category="Status & Progress", fr="FR13", title="Completion per actor",
+         description="Finished / total per actor (also shown on the Process Board without SPARQL)",
+         query=_q("SELECT ?actorLabel (COUNT(?process) AS ?total) (SUM(IF(?fin, 1, 0)) AS ?finished) WHERE {",
+                  f"  {WORK}", f"  {CUR_ACTOR}", f"  {CUR_STATUS}", "  ?st ioc:isFinished ?fin .",
+                  "} GROUP BY ?actorLabel ORDER BY ?actorLabel")),
+    dict(id="q05", category="Dependencies", fr="FR5", title="Can start next",
+         description="Not started, not cancelled, and every predecessor finished — 'What should I do next?'",
+         query=_q("SELECT ?process ?label ?actorLabel WHERE {", f"  {WORK}", f"  {CUR_STATUS}",
+                  "  ?st ioc:isStarted false ; ioc:isCancelled false .",
+                  f"  OPTIONAL {{ {CUR_ACTOR} }}",
+                  "  FILTER NOT EXISTS {", "    ?process ioc:hasPredecessor ?pre .",
+                  "    ?pre ioc:hasStatus ?pp . ?pp ioc:hasStatusValue ?ps . ?ps ioc:isFinished false .",
+                  "    FILTER EXISTS { ?pp a ioc:CurrentProcessDataState }", "  }", "} ORDER BY ?label")),
+    dict(id="q06", category="Dependencies", fr="FR6", title="Blocked processes",
+         description="Not started and waiting for an unfinished predecessor (one row per blocking relation)",
+         query=_q("SELECT ?label ?blockerLabel WHERE {", f"  {WORK}", f"  {CUR_STATUS}", "  ?st ioc:isStarted false .",
+                  "  ?process ioc:hasPredecessor ?blocker . ?blocker rdfs:label ?blockerLabel .",
+                  "  ?blocker ioc:hasStatus ?bp . ?bp ioc:hasStatusValue ?bs . ?bs ioc:isFinished false .",
+                  "  FILTER EXISTS { ?bp a ioc:CurrentProcessDataState }", "} ORDER BY ?label")),
+    dict(id="q07", category="Dependencies", fr="FR7", title="Everything that depends on a process",
+         description="Direct and indirect successors (property path ioc:hasPredecessor+)",
+         params=[_P("process", "process", "Process", "Drainage — Below Ground Foul & Surface Water")],
+         query=_q("SELECT DISTINCT ?label ?link WHERE {", "  ?x ioc:hasInternalProcessMark {{process}} .",
+                  "  ?process ioc:hasPredecessor+ ?x ; rdfs:label ?label .",
+                  '  BIND(IF(EXISTS { ?process ioc:hasPredecessor ?x }, "direct", "indirect") AS ?link)',
+                  "} ORDER BY ?link ?label")),
+    dict(id="q08", category="Dependencies", fr="FR8", title="Are the prerequisites of a process finished?",
+         description="Direct predecessors of a process with their current status",
+         params=[_P("process", "process", "Process", "Structural Screed Topping — Floors 1-3")],
+         query=_q("SELECT ?predLabel ?finished WHERE {", "  ?p ioc:hasInternalProcessMark {{process}} ; ioc:hasPredecessor ?pre .",
+                  "  ?pre rdfs:label ?predLabel ; ioc:hasStatus ?pp . ?pp ioc:hasStatusValue ?ps . ?ps ioc:isFinished ?finished .",
+                  "  FILTER EXISTS { ?pp a ioc:CurrentProcessDataState }", "}")),
+    dict(id="q09", category="Dependencies", fr="", title="Direct predecessor relations", description="All asserted ioc:hasPredecessor links",
+         query=_q("SELECT ?label ?predLabel WHERE {", "  ?process a ioc:Process ; rdfs:label ?label ; ioc:hasPredecessor ?p .",
+                  "  ?p rdfs:label ?predLabel .", "} ORDER BY ?label")),
+    dict(id="q10", category="Schedule", fr="FR9", title="Overdue processes",
+         description="Planned finish before the reference date but not finished",
+         params=[_P("date", "date", "Reference date", "2025-10-01")],
+         query=_q("SELECT ?label ?end ?actorLabel WHERE {", "  BIND({{date}} AS ?today)",
+                  f"  {WORK}", f"  {CUR_SCHED}", "  ?sched prov:endedAtTime ?end .", f"  {CUR_STATUS}",
+                  "  ?st ioc:isFinished false ; ioc:isCancelled false .", f"  OPTIONAL {{ {CUR_ACTOR} }}",
+                  "  FILTER(?end < ?today)", "} ORDER BY ?end")),
+    dict(id="q11", category="Schedule", fr="", title="Processes by start date", description="prov:startedAtTime / prov:endedAtTime",
+         query=_q("SELECT ?label ?start ?end WHERE {", f"  {WORK}", f"  {CUR_SCHED}", "  ?sched prov:startedAtTime ?start .",
+                  "  OPTIONAL { ?sched prov:endedAtTime ?end }", "} ORDER BY ?start")),
+    dict(id="q12", category="Schedule", fr="", title="Processes without schedule", description="Data-quality check",
+         query=_q("SELECT ?process ?label WHERE {", f"  {WORK}", "  FILTER NOT EXISTS { ?process ioc:hasSchedule ?s }", "}")),
+    dict(id="q13", category="Resources & Materials", fr="FR10", title="Materials needed in a period",
+         description="Raw-material inputs of processes that start in the chosen period",
+         params=[_P("from", "date", "From", "2025-09-01"), _P("to", "date", "To (exclusive)", "2025-11-01")],
+         query=_q("SELECT ?start ?label ?material WHERE {", f"  {WORK}", f"  {CUR_SCHED}", "  ?sched prov:startedAtTime ?start .",
+                  "  ?process ioc:hasInputElement ?e . ?e ioc:hasInputElementValue ?m . ?m a ioc:RawMaterial ; rdfs:label ?material .",
+                  "  FILTER(?start >= {{from}} && ?start < {{to}})",
+                  "} ORDER BY ?start")),
+    dict(id="q14", category="Resources & Materials", fr="", title="Resources and where they are used", description="ioc:Resource per process",
+         query=_q("SELECT ?resource ?label WHERE {", f"  {WORK}",
+                  "  ?process ioc:hasResource ?r . ?r ioc:hasResourceValue ?res . ?res rdfs:label ?resource .", "} ORDER BY ?resource")),
+    dict(id="q15", category="Resources & Materials", fr="", title="Output elements", description="ioc:Element produced by processes",
+         query=_q("SELECT ?label ?element WHERE {", f"  {WORK}",
+                  "  ?process ioc:hasOutputElement ?o . ?o ioc:hasOutputElementValue ?el . ?el rdfs:label ?element .", "}")),
+    dict(id="q16", category="Space & Structure", fr="FR12", title="Processes per location", description="ioc:hasInitialSpace → ioc:Location",
+         query=_q("SELECT ?space (COUNT(?process) AS ?n) (GROUP_CONCAT(?label; separator=' | ') AS ?processes) WHERE {", f"  {WORK}",
+                  "  ?process ioc:hasInitialSpace ?sp . ?sp ioc:hasInitialSpaceValue ?loc . ?loc rdfs:label ?space .",
+                  "} GROUP BY ?space ORDER BY DESC(?n)")),
+    dict(id="q17", category="Space & Structure", fr="FR13", title="Completion per phase",
+         description="Children of phases (ioc:hasParent). Needs a source with phases (Excel, MS Project); a CSV has none",
+         params=[_P("phase", "phase", "Phase", "", optional=True)],
+         query=_q("SELECT ?phase (COUNT(?process) AS ?total) (SUM(IF(?fin,1,0)) AS ?finished) WHERE {",
+                  "  ?process ioc:hasParent ?ph . ?ph rdfs:label ?phase .",
+                  "  ?ph ioc:hasInternalProcessMark {{phase}} .",
+                  f"  {CUR_STATUS}", "  ?st ioc:isFinished ?fin .",
+                  "} GROUP BY ?phase ORDER BY ?phase")),
+    dict(id="q18", category="Provenance", fr="FR11", title="Status history of a process",
+         description="All ProcessDataState versions: when recorded, when it happened, actual start/finish",
+         params=[_P("process", "process", "Process", "Thermal & Acoustic Insulation — Floors & Partitions")],
+         query=_q("SELECT ?generated ?happened ?invalidated ?current ?started ?finished ?paused ?progress ?actualStart ?actualEnd ?by WHERE {",
+                  "  ?process ioc:hasInternalProcessMark {{process}} ; ioc:hasStatus ?pds .",
+                  "  ?pds prov:generatedAtTime ?generated ; ioc:hasStatusValue ?st .",
+                  "  ?st ioc:isStarted ?started ; ioc:isFinished ?finished ; ioc:isPaused ?paused .",
+                  "  OPTIONAL { ?st ext:progress ?progress }", "  OPTIONAL { ?st ext:effectiveDate ?happened }",
+                  "  OPTIONAL { ?st ext:actualStart ?actualStart }", "  OPTIONAL { ?st ext:actualEnd ?actualEnd }",
+                  "  OPTIONAL { ?pds prov:invalidatedAtTime ?invalidated }",
+                  "  OPTIONAL { ?pds ioc:generatedByActor/rdfs:label ?by }",
+                  "  BIND(EXISTS { ?pds a ioc:CurrentProcessDataState } AS ?current)", "} ORDER BY DESC(?generated)")),
+    dict(id="q19", category="Provenance", fr="", title="Re-planned processes (planned vs baseline)",
+         description="Processes whose current schedule differs from the baseline — result of an applied re-plan",
+         query=_q("SELECT ?label ?baselineEnd ?currentEnd ?by WHERE {", f"  {WORK}",
+                  "  ?process ioc:hasSchedule ?old . ?old ioc:hasScheduleValue ?os . ?os prov:endedAtTime ?baselineEnd .",
+                  "  FILTER NOT EXISTS { ?old prov:wasRevisionOf ?any }",
+                  f"  {CUR_SCHED}", "  ?sched prov:endedAtTime ?currentEnd .",
+                  "  OPTIONAL { ?schpds ioc:generatedByActor/rdfs:label ?by }",
+                  "  FILTER(?currentEnd != ?baselineEnd)", "} ORDER BY ?baselineEnd")),
+    dict(id="q20", category="Ontology", fr="", title="ProcessDataState chain of a process",
+         description="Shows the IoC versioning pattern: Process → PDS → value",
+         params=[_P("process", "process", "Process", "Topographic & Boundary Survey")],
+         query=_q("SELECT ?prop ?pds ?value ?valueLabel WHERE {", "  ?process ioc:hasInternalProcessMark {{process}} ; ?prop ?pds .",
+                  "  ?pds ?vp ?value . FILTER EXISTS { ?pds a ioc:CurrentProcessDataState }",
+                  "  FILTER(?vp != rdf:type && ?vp != prov:generatedAtTime)",
+                  "  OPTIONAL { ?value rdfs:label ?valueLabel }", "} ORDER BY ?prop").replace(
+                  "PREFIX ext:", "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\nPREFIX ext:")),
+    dict(id="q21", category="Ontology", fr="", title="Instances per IoC class", description="Asserted rdf:type counts",
+         query=_q("SELECT ?class (COUNT(DISTINCT ?x) AS ?n) WHERE {", "  ?x a ?class .",
+                  '  FILTER(STRSTARTS(STR(?class), "http://w3id.org/ioc#"))', "} GROUP BY ?class ORDER BY DESC(?n)")),
 ]
+PRESET_BY_ID = {p["id"]: p for p in SPARQL_PRESETS}
+
+
+def _sparql_str(v: str) -> str:
+    return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ").replace("\r", " ") + '"'
+
+
+def preset_options(g: Graph) -> dict:
+    """Values offered in the drop-down lists, taken from the project (ABox)."""
+    actors = sorted({str(g.value(a, RDFS.label)) for p in _processes(g)
+                     for a in [_current_value(g, p, IOC.hasActor, IOC.hasActorValue)] if a is not None})
+    procs = []
+    for p in _processes(g):
+        mark = str(g.value(p, IOC.hasInternalProcessMark) or "")
+        s, _ = _schedule_dates(g, p)
+        procs.append({"value": mark, "name": _label(g, p), "label": f"{mark} · {_label(g, p)}", "start": _fmt(s)})
+    procs.sort(key=lambda x: (x["start"] or "9999", x["name"]))
+    phases = [{"value": str(g.value(p, IOC.hasInternalProcessMark) or ""), "name": _label(g, p), "label": _label(g, p)}
+              for p in g.subjects(RDF.type, IOC.Process) if _is_summary(g, p)]
+    phases.sort(key=lambda x: x["label"])
+    dates = [d for p in _processes(g) for d in _schedule_dates(g, p) if d]
+    return {"actor": [{"value": a, "name": a, "label": a} for a in actors], "process": procs, "phase": phases,
+            "dateRange": {"min": _fmt(min(dates)) if dates else None, "max": _fmt(max(dates)) if dates else None}}
+
+
+def _resolve_param(spec: dict, value: Optional[str], opts: dict) -> str:
+    """Use the given value, else the default; a process/phase may be given by mark or by label."""
+    given = value is not None and (value != "" or spec["optional"])
+    v = (value if given else spec["default"]) or ""
+    if spec["type"] in ("process", "phase", "actor"):
+        choices = opts[spec["type"]]
+        hit = next((o["value"] for o in choices if v in (o["value"], o["name"])), None)
+        if hit is None and given and v:
+            raise HTTPException(400, f"Unknown {spec['type']} '{v}' for parameter '{spec['name']}'")
+        if hit is None:
+            hit = "" if spec["optional"] else (choices[0]["value"] if choices else "")
+        return hit
+    if spec["type"] == "date":
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+            raise HTTPException(400, f"Parameter '{spec['name']}' must be a date YYYY-MM-DD")
+    return v
+
+
+def fill_preset(preset: dict, params: Dict[str, str], opts: dict) -> Tuple[str, Dict[str, str]]:
+    used, q = {}, preset["query"]
+    for spec in preset.get("params", []):
+        v = _resolve_param(spec, params.get(spec["name"]), opts)
+        used[spec["name"]] = v
+        ph = "{{" + spec["name"] + "}}"
+        if v == "" and spec["optional"]:
+            q = "\n".join(l for l in q.split("\n") if ph not in l)
+            continue
+        lit = f'"{v}T00:00:00"^^xsd:dateTime' if spec["type"] == "date" else _sparql_str(v)
+        q = q.replace(ph, lit)
+    return q, used
+
+
+def _run_query(g: Graph, query: str) -> dict:
+    try:
+        result = g.query(query)
+        variables = [str(v) for v in result.vars]
+        rows = [{str(v): (str(row[v]) if row[v] is not None else "") for v in result.vars} for row in result]
+        return {"success": True, "variables": variables, "results": rows, "count": len(rows)}
+    except Exception as e:
+        return {"success": False, "variables": [], "results": [], "count": 0, "error": str(e)}
+
 
 @app.get("/api/sparql/presets")
 async def get_sparql_presets():
-    return {"presets": [{"id": i, "category": c, "fr": fr, "title": t, "description": d, "query": q}
-                        for i, c, fr, t, d, q in SPARQL_PRESETS]}
+    return {"presets": [{"id": p["id"], "category": p["category"], "fr": p["fr"], "title": p["title"],
+                         "description": p["description"], "params": p.get("params", []), "query": p["query"]}
+                        for p in SPARQL_PRESETS]}
+
+
+@app.get("/api/projects/{pid}/sparql/options")
+async def get_preset_options(pid: str):
+    return preset_options(_load_graph(pid))
+
+
+def _run_preset(pid: str, qid: str, params: Dict[str, str]) -> dict:
+    preset = PRESET_BY_ID.get(qid)
+    if preset is None:
+        raise HTTPException(404, f"Unknown preset '{qid}'")
+    g = _load_graph(pid)
+    query, used = fill_preset(preset, params, preset_options(g))
+    return {"preset": qid, "params": used, "query": query, **_run_query(g, query)}
+
+
+@app.post("/api/projects/{pid}/presets/{qid}/run")
+async def run_preset(pid: str, qid: str, req: PresetRunRequest):
+    """Run a preset with parameter values, e.g. {"params": {"process": "P15"}} (GUI drop-downs)."""
+    return _run_preset(pid, qid, req.params)
+
+
+@app.get("/api/projects/{pid}/presets/{qid}")
+async def run_preset_get(pid: str, qid: str, request: Request):
+    """Machine access: GET /api/projects/{pid}/presets/q07?process=P15"""
+    return _run_preset(pid, qid, dict(request.query_params))
 
 # ── Ontology browser (derived from the TBox at run time) ────────────────────
 

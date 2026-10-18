@@ -289,13 +289,13 @@
         "resources": 52,
         "materials": 81,
         "locations": 0,
-        "triples": 2217
+        "triples": 2270
       }
     },
     "validation": {
       "conforms": true,
       "tboxVersion": "0.5.1",
-      "triples": 2217,
+      "triples": 2270,
       "violations": 0,
       "byRule": {
         "R1 undeclared IoC term": 0,
@@ -308,6 +308,8 @@
       },
       "applicationExtensionTerms": [
         "ext:Project",
+        "ext:actualEnd",
+        "ext:actualStart",
         "ext:importedAt",
         "ext:isSummary",
         "ext:progress",

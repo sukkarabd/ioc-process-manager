@@ -54,10 +54,11 @@ def snapshot(g):
 
 
 def preset_answers(g):
-    presets = {i: q for i, _, _, _, _, q in s.SPARQL_PRESETS}
+    opts = s.preset_options(g)                       # v3.1: presets are templates; default values filled in
     res = {}
     for qid in FR_PRESETS:
-        rows = list(g.query(presets[qid]))
+        query, _ = s.fill_preset(s.PRESET_BY_ID[qid], {}, opts)
+        rows = list(g.query(query))
         # compare process-level content: drop node URIs, reduce timestamps to dates
         res[qid] = sorted(tuple(str(v)[:10] if re.match(r"\d{4}-\d{2}-\d{2}T", str(v)) else str(v)
                                 for v in r if v is not None and not str(v).startswith("urn:")) for r in rows)
@@ -99,7 +100,7 @@ def main(paths):
 
     out += ["\n## Table C — Preset-query answers identical to reference\n",
             "| Preset | FR | " + " | ".join(others) + " |", "|---|---|" + "---|" * len(others)]
-    frmap = {i: fr for i, _, fr, *_ in s.SPARQL_PRESETS}
+    frmap = {p["id"]: p["fr"] for p in s.SPARQL_PRESETS}
     for qid in FR_PRESETS:
         out.append(f"| {qid} | {frmap[qid]} | " + " | ".join(
             ("yes" if data[f]["answers"][qid] == data[ref]["answers"][qid] else f"no ({len(data[f]['answers'][qid])} vs {len(data[ref]['answers'][qid])} rows)")

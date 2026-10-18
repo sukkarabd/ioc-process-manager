@@ -26,8 +26,20 @@ The IoC ontology is loaded read-only from `ioc_tbox.ttl`.
 | `sample_data/` | Thornfield Court test scenario as CSV, Excel workbook, and MS Project XML |
 | `tools/make_mspdi_fixture.py` | Regenerates the MS Project XML file from the Excel workbook |
 | `tools/evaluate_unification.py` | Evaluation of SQ1 (integration, FR1–FR3): coverage, preservation, TBox conformance, cross-format agreement |
-| `tools/evaluate_tracking.py` | Evaluation of SQ2 (tracking and delay impact, FR4–FR17): answers against a ground truth computed directly from the CSV, before (S0) and after (S1) scripted status updates |
+| `tools/evaluate_tracking.py` | Evaluation of SQ2 (tracking and delay impact, FR4–FR17): answers against a ground truth computed directly from the CSV, before (S0) and after (S1) scripted status updates; parameter sweep over all actors/processes/months; FR16 and FR17 checks |
 | `results/` | Output of the SQ1 and SQ2 evaluation, and the SQ3 walkthrough protocol (filled in by hand) |
+
+## Parameterised questions (v3.1)
+
+The SPARQL presets no longer contain fixed actors, processes or dates. Each preset declares its
+parameters (actor, process, date, phase); the GUI shows them as drop-down lists filled from the
+open project, and the server inserts the chosen value into the query. The same presets are
+available to machines, e.g.
+
+    GET  /api/projects/{pid}/presets/q07?process=P15
+    POST /api/projects/{pid}/presets/q13/run   {"params": {"from": "2025-09-01", "to": "2025-11-01"}}
+
+The SPARQL text stays visible and editable for users who want to write their own query.
 
 ## Requirement labels
 
@@ -66,26 +78,61 @@ measured automatically; they are recorded in `results/SQ3_walkthrough_protocol.c
 |---|---|---|
 | POST | `/api/import/file` | `{name, filename, data(base64)}` — CSV / XLSX / MSPDI, returns import report |
 | GET | `/api/projects/{pid}/processes[/{id}]` | process data (current states) |
-| POST | `/api/projects/{pid}/processes/{id}/status` | `{status, progress?, by?}` → new versioned status state (FR16) |
-| GET | `/api/projects/{pid}/processes/{id}/history` | all status and schedule states (FR11) |
+| POST | `/api/projects/{pid}/processes/{id}/status` | `{status, progress?, by?, date?}` → new versioned status state (FR16); `date` = when it happened → actual start/finish |
+| GET | `/api/projects/{pid}/processes/{id}/history` | all status and schedule states + baseline / plan / actual comparison (FR11) |
+| GET | `/api/projects/{pid}/progress?date=` | completion overall, per phase, per actor (FR13) and completion date baseline / plan / forecast |
 | POST | `/api/projects/{pid}/impact` | `{process, delayDays \| newEndDate}` → what-if delay impact, read-only (FR14) |
 | POST | `/api/projects/{pid}/impact/apply` | same body + `by` → re-plan: new schedule states, baseline kept (FR17) |
 | GET | `/api/projects/{pid}/delays?date=YYYY-MM-DD` | late processes at the reference date and their combined knock-on effect (FR15) |
+| POST | `/api/projects/{pid}/delays/apply?date=YYYY-MM-DD` | record that forecast as a re-plan (baseline kept) |
 | GET | `/api/projects/{pid}/validate` | check of the ABox against the TBox, rules R1–R7 (FR3) |
 | GET | `/api/projects/{pid}/ontology` · `/api/tbox` | TBox-derived class/property description |
 | POST | `/api/projects/{pid}/sparql` | read-only SPARQL |
-| GET | `/api/sparql/presets` | 21 preset queries, tagged with the requirements FR4–FR15 |
+| GET | `/api/sparql/presets` | 21 preset queries with their parameters, tagged with the requirements FR4–FR15 |
+| GET | `/api/projects/{pid}/sparql/options` | values for the parameter drop-downs (actors, processes, phases) |
+| POST/GET | `/api/projects/{pid}/presets/{qid}[/run]` | run a preset with parameter values |
 
 ## Delay propagation — assumptions
 
 IoC relates processes through `ioc:hasPredecessor` without link type or lag. The
-propagation therefore assumes finish-to-start links and calendar days, preserves
-durations, and never moves finished or cancelled processes. It propagates shifts
+propagation therefore assumes finish-to-start links and calendar days and never moves
+finished or cancelled processes. A process that has not started keeps its duration (start
+and finish move together); a process that has already started keeps its start and only its
+finish moves. It propagates shifts
 through the float of each link: `shift(s) = max_p max(0, shift(p) − gap(p→s))`,
 `gap = max(0, start(s) − end(p) − 1 day)`. Where the baseline already overlaps
 (6 of 51 links in Thornfield Court), the link has no float and a delay is passed on
 in full. SPARQL 1.1 can find the affected successors (`ioc:hasPredecessor+`) but not
 compute this longest-path recursion, so it runs in the application layer.
+
+## Planned vs actual
+
+IoC 0.5.1 has one kind of schedule: `prov:startedAtTime` / `prov:endedAtTime` on `ioc:Schedule`
+(the plan). It does not distinguish planned from actual dates. The prototype therefore keeps
+* the **baseline** = the first `ioc:Schedule` state (kept when a re-plan writes a new one),
+* the **current plan** = the current `ioc:Schedule` state,
+* the **actual** start / finish as `ext:actualStart` / `ext:actualEnd` on the status value, set
+  from the date entered with a status change (`ext:effectiveDate`; the time of recording stays
+  in `prov:generatedAtTime`). MS Project `ActualStart` / `ActualFinish` are imported.
+
+All of it is part of the ABox and therefore of the Turtle export.
+
+## Changes in v3.1 (formative iteration after the walkthrough)
+
+1. Presets parameterised (actor / process / date / phase as drop-downs; no fixed values in the
+   query text); q07 shows direct vs indirect successors; machine access with parameters.
+2. Re-plan: a started process keeps its start, only its finish moves (before, the start moved too).
+3. "Late" at a status date: a process that has not started is late by (status date − planned
+   start); before, a not-started process whose planned end had passed got only
+   (status date − planned end), which under-estimated the delay.
+4. Delay impact and Delay Watch show planned → new finish per process, the predecessor that
+   drives the shift and the days absorbed by float; one summary sentence; details collapsed.
+5. Delay Watch forecast can be recorded as a re-plan; project completion shown as baseline /
+   current plan / forecast on the Process Board; board column "vs baseline".
+6. Planned vs actual dates (FR11): effective date of status changes, actual start / finish,
+   comparison table in the history.
+7. FR13 answered on the Process Board (progress per phase and per actor), no SPARQL needed.
+8. Evaluation: presets called with parameters; parameter sweep; FR16 / FR17 checks.
 
 ## Changes compared with v1
 

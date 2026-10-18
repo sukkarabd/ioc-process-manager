@@ -251,6 +251,12 @@ function Loading(){return <div className="loading"><div className="spin"/>Loadin
 
 function Tag({k,v}){return <span className="tag"><span className="hi">{k}:</span>{v}</span>}
 
+// "2025-09-19" → "19 Sep 2025"
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fd(x,withYear=true){if(!x)return '—';const [y,m,d]=x.slice(0,10).split('-');return `${+d} ${MON[+m-1]}${withYear?' '+y:''}`}
+function sd(n){if(n==null)return '';return n>0?`+${n} d`:n<0?`−${-n} d`:'±0 d'}
+const todayISO=()=>new Date().toISOString().slice(0,10);
+
 // ── Projects screen ────────────────────────────────────────────────────────
 function Projects({onOpen}){
   const {data,loading,refetch}=useFetch(API('/api/projects'));
@@ -450,14 +456,67 @@ function ImportModal({onClose,onDone}){
 }
 
 // ── Process Board ──────────────────────────────────────────────────────────
-function ProcessBoard({projId,projName,globalTick,onMutate}){
+// FR13 ("how far is the project / each phase / each actor?") is answered here without SPARQL.
+function Breakdown({rows,keyName,empty}){
+  if(!rows.length)return <div className="ont-empty">{empty}</div>;
+  return <div>{rows.map(r=>(
+    <div key={r[keyName]} style={{display:'grid',gridTemplateColumns:'minmax(120px,1.4fr) 1fr 70px',gap:10,alignItems:'center',padding:'4px 0',borderBottom:'1px solid var(--b1)',fontSize:11}}>
+      <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={r[keyName]}>{r[keyName]}</span>
+      <div className="ptrack" style={{height:6}}><div className="pfill" style={{width:`${r.pct}%`,background:r.pct===100?'var(--green)':'var(--cyan)'}}/></div>
+      <span style={{fontFamily:'var(--mono)',color:'var(--t2)',textAlign:'right'}}>{r.finished}/{r.total}</span>
+    </div>))}</div>;
+}
+
+function ProgressCard({projId,globalTick,statusDate}){
+  const {data}=useFetch(API(`/api/projects/${projId}/progress${statusDate?`?date=${statusDate}`:''}`),[projId,globalTick,statusDate]);
+  const [tab,setTab]=useState('phase');
+  if(!data)return null;
+  const c=data.completion;
+  return(
+    <div className="g2" style={{marginBottom:14}}>
+      <div className="card" style={{marginBottom:0}}>
+        <div className="card-head"><div className="card-title">Progress</div>
+          <div className="pills">
+            {[['phase','per phase'],['actor','per actor']].map(([k,l])=><div key={k} className={`pill ${tab===k?'on':''}`} onClick={()=>setTab(k)}>{l}</div>)}
+          </div>
+        </div>
+        <div className="card-body" style={{maxHeight:230,overflowY:'auto'}}>
+          <div style={{fontSize:12,marginBottom:8}}>Project: <b>{data.overall.finished} of {data.overall.total}</b> processes finished ({data.overall.pct} %)</div>
+          {tab==='phase'
+            ?<Breakdown rows={data.byPhase} keyName="phase" empty="This project has no phases: the source file (e.g. a CSV) has no phase structure. Import the Excel or MS Project file to see progress per phase."/>
+            :<Breakdown rows={data.byActor} keyName="actor" empty="No actors in this project."/>}
+        </div>
+      </div>
+      <div className="card" style={{marginBottom:0}}>
+        <div className="card-head"><div className="card-title">Completion date</div>
+          <span style={{fontSize:10,color:'var(--t3)'}}>status date {fd(c.referenceDate)}</span></div>
+        <div className="card-body">
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>
+            {[['Baseline',c.baseline,null,'first imported plan'],
+              ['Current plan',c.currentPlan,c.planVsBaselineDays,'after recorded re-plans'],
+              ['Forecast',c.forecast,c.forecastVsBaselineDays,`if the ${c.lateNow} late process${c.lateNow!==1?'es are':' is'} not recovered`]].map(([l,v,dv,sub])=>(
+              <div key={l}>
+                <div className="stat-lbl">{l}</div>
+                <div style={{fontFamily:'var(--mono)',fontSize:15,fontWeight:700,color:dv>0?'var(--red)':'var(--t1)'}}>{fd(v)}</div>
+                <div style={{fontSize:10,color:dv>0?'var(--red)':'var(--t3)',fontFamily:'var(--mono)'}}>{dv!=null?`${sd(dv)} vs baseline`:' '}</div>
+                <div style={{fontSize:10,color:'var(--t3)',marginTop:2}}>{sub}</div>
+              </div>))}
+          </div>
+          <div style={{fontSize:10,color:'var(--t3)',marginTop:10}}>The status date is set in the Delay Watch; record re-plans there or in a process's delay impact.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProcessBoard({projId,projName,globalTick,onMutate,statusDate}){
   const {data,loading,refetch}=useFetch(API(`/api/projects/${projId}/processes`),[projId,globalTick]);
   const [selected,setSelected]=useState(null);
   const [showAdd,setShowAdd]=useState(false);
   const [filter,setFilter]=useState('');
 
   const procs=data?.processes||[];
-  const filtered=procs.filter(p=>
+  const filtered=[...procs].sort((a,b)=>(a.schedule?.startedAtTime||'9').localeCompare(b.schedule?.startedAtTime||'9')).filter(p=>
     !filter||p.label.toLowerCase().includes(filter.toLowerCase())||
     (p.actor?.label||'').toLowerCase().includes(filter.toLowerCase())||
     p.status?.label?.toLowerCase().includes(filter.toLowerCase())
@@ -467,7 +526,7 @@ function ProcessBoard({projId,projName,globalTick,onMutate}){
     total:procs.length,
     finished:procs.filter(p=>p.status?.isFinished).length,
     started:procs.filter(p=>p.status?.isStarted&&!p.status?.isFinished).length,
-    blocked:procs.filter(p=>p.predecessors?.some(predId=>procs.find(x=>x.uri===predId&&!x.status?.isFinished))).length,
+    blocked:procs.filter(p=>!p.status?.isStarted&&p.predecessors?.some(predId=>procs.find(x=>x.uri===predId&&!x.status?.isFinished))).length,
   };
   const pct=stats.total?Math.round(stats.finished/stats.total*100):0;
 
@@ -475,12 +534,12 @@ function ProcessBoard({projId,projName,globalTick,onMutate}){
 
   return(
     <div>
-      <div className="g4" style={{marginBottom:16}}>
+      <div className="g4" style={{marginBottom:14}}>
         {[
           {l:'Total',v:stats.total,c:'var(--t1)',s:'ioc:Process instances'},
           {l:'Finished',v:stats.finished,c:'var(--green)',s:`${pct}% complete`},
-          {l:'In Progress',v:stats.started,c:'var(--amber)',s:'isStarted=true'},
-          {l:'Blocked',v:stats.blocked,c:'var(--red)',s:'predecessor unfinished'},
+          {l:'In Progress',v:stats.started,c:'var(--amber)',s:'started, not finished'},
+          {l:'Blocked',v:stats.blocked,c:'var(--red)',s:'not started, a predecessor unfinished'},
         ].map(s=>(
           <div className="stat" key={s.l}>
             <div className="stat-lbl">{s.l}</div>
@@ -491,28 +550,32 @@ function ProcessBoard({projId,projName,globalTick,onMutate}){
         ))}
       </div>
 
+      <ProgressCard projId={projId} globalTick={globalTick} statusDate={statusDate}/>
+
       <div className="card">
         <div className="card-head">
           <div className="card-title">⬡ Processes <Chip prop="Process"/></div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <input className="form-input" style={{width:180}} placeholder="Filter…" value={filter} onChange={e=>setFilter(e.target.value)}/>
+            <input className="form-input" style={{width:180}} placeholder="Filter by name, actor, status…" value={filter} onChange={e=>setFilter(e.target.value)}/>
             <button className="btn btn-p btn-sm" onClick={()=>setShowAdd(true)}>+ Add Process</button>
           </div>
         </div>
         <table className="tbl">
           <thead><tr>
-            <th>Process</th><th>Status</th><th>Actor</th><th>Method</th><th>Progress</th><th>Schedule</th>
+            <th>Process</th><th>Status</th><th>Actor</th><th>Progress</th><th>Planned start → finish</th><th>vs baseline</th>
           </tr></thead>
           <tbody>
             {filtered.map(p=>(
               <tr key={p.uri} className="clickable" onClick={()=>setSelected(p.id)}>
-                <td><div className="plabel">{p.label}</div><div className="pid">{p.id}</div></td>
+                <td><div className="plabel">{p.label}</div><div className="pid">{p.id}{p.method?` · ${p.method.label}`:''}</div></td>
                 <td><Badge status={p.status}/></td>
                 <td style={{fontSize:12}}>{p.actor?.label||<span style={{color:'var(--t3)'}}>—</span>}</td>
-                <td style={{fontSize:11,color:'var(--t2)',maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.method?.label||'—'}</td>
                 <td style={{minWidth:110}}><Pbar pct={p.progress}/></td>
-                <td style={{fontSize:10,color:'var(--t3)',fontFamily:'var(--mono)'}}>
-                  {p.schedule?.startedAtTime?p.schedule.startedAtTime.slice(0,10):'—'}
+                <td style={{fontSize:10,color:'var(--t2)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
+                  {p.schedule?.startedAtTime?`${fd(p.schedule.startedAtTime,false)} → ${fd(p.schedule.endedAtTime)}`:'—'}
+                </td>
+                <td style={{fontSize:10,fontFamily:'var(--mono)',color:p.schedule?.slipDays>0?'var(--red)':'var(--t3)'}}>
+                  {p.schedule?.slipDays>0?sd(p.schedule.slipDays):'on plan'}
                 </td>
               </tr>
             ))}
@@ -521,7 +584,7 @@ function ProcessBoard({projId,projName,globalTick,onMutate}){
         {filtered.length===0&&<div className="empty">No processes match filter</div>}
       </div>
 
-      {selected&&<ProcessPanel projId={projId} procId={selected} allProcs={procs}
+      {selected&&<ProcessPanel projId={projId} procId={selected} allProcs={procs} statusDate={statusDate}
                                onClose={()=>setSelected(null)} onRefresh={refetch} onMutate={onMutate}/>}
       {showAdd&&<AddProcessModal projId={projId} allProcs={procs}
                                   onClose={()=>setShowAdd(false)} onDone={()=>{setShowAdd(false);refetch();onMutate&&onMutate()}}/>}
@@ -530,15 +593,18 @@ function ProcessBoard({projId,projName,globalTick,onMutate}){
 }
 
 // ── Process Side Panel ─────────────────────────────────────────────────────
-function ProcessPanel({projId,procId,allProcs,onClose,onRefresh,onMutate}){
+function ProcessPanel({projId,procId,allProcs,onClose,onRefresh,onMutate,statusDate}){
   const {data,loading,refetch}=useFetch(API(`/api/projects/${projId}/processes/${procId}`),[projId,procId]);
   const [updating,setUpdating]=useState(false);
   const [deleting,setDeleting]=useState(false);
+  const [happened,setHappened]=useState(todayISO());
+  useEffect(()=>{if(statusDate){setHappened(statusDate);return}
+    fetch(API(`/api/projects/${projId}/statusdate`)).then(r=>r.json()).then(d=>d.date&&setHappened(d.date)).catch(()=>{})},[projId,statusDate]);
 
   async function updateStatus(s){
     setUpdating(true);
     await fetch(API(`/api/projects/${projId}/processes/${procId}/status`),{
-      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:s})
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:s,date:happened||undefined})
     });
     refetch();onRefresh();
     onMutate&&onMutate();  // ← notify all other views
@@ -580,6 +646,11 @@ function ProcessPanel({projId,procId,allProcs,onClose,onRefresh,onMutate}){
 
       <div className="sp-section">
         <div className="sp-head">Update ioc:Status</div>
+        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--t2)',marginBottom:8}}>
+          Happened on
+          <input className="form-input" type="date" value={happened} onChange={e=>setHappened(e.target.value)} style={{width:150,padding:'3px 6px'}}/>
+          <span style={{color:'var(--t3)',fontSize:10}}>becomes the actual start / finish</span>
+        </label>
         <div className="pills">
           {['planned','ready','started','finished','paused','cancelled'].map(s=>(
             <div key={s} className={`pill ${p.status?.label?.toLowerCase()===s?'on':''}`}
@@ -620,7 +691,7 @@ function ProcessPanel({projId,procId,allProcs,onClose,onRefresh,onMutate}){
         {p.schedule.startedAtTime&&<div className="sp-row"><span className="sp-key">prov:startedAtTime</span><span className="sp-val">{p.schedule.startedAtTime.slice(0,10)}</span></div>}
         {p.schedule.endedAtTime&&<div className="sp-row"><span className="sp-key">prov:endedAtTime</span><span className="sp-val">{p.schedule.endedAtTime.slice(0,10)}</span></div>}
         {p.schedule.hasDuration&&<div className="sp-row"><span className="sp-key">ioc:hasDuration</span><span className="sp-val">{p.schedule.hasDuration}</span></div>}
-        {p.schedule.slipDays>0&&<div className="sp-row"><span className="sp-key">slip vs. baseline</span><span className="sp-val" style={{color:'var(--red)'}}>+{p.schedule.slipDays} days (baseline end {p.schedule.baselineEnd})</span></div>}
+        {p.schedule.slipDays>0&&<div className="sp-row"><span className="sp-key">finish vs. baseline</span><span className="sp-val" style={{color:'var(--red)'}}>+{p.schedule.slipDays} days (baseline finish {fd(p.schedule.baselineEnd)})</span></div>}
       </div>}
 
       {p.resources?.length>0&&<div className="sp-section">
@@ -679,27 +750,53 @@ function ProcessPanel({projId,procId,allProcs,onClose,onRefresh,onMutate}){
 }
 
 // ── Delay impact (what-if + re-plan) ───────────────────────────────────────
-function ImpactResult({r}){
+// One row per process: finish before → after, the shift, and WHY it is smaller than the
+// original delay (days absorbed by the float before this process).
+function ImpactRows({rows}){
+  return <table className="tbl" style={{fontSize:11}}>
+    <thead><tr><th>Process · responsible</th><th>Finish: planned → new</th><th style={{textAlign:'right'}}>Shift</th></tr></thead>
+    <tbody>{rows.map(a=>(
+      <tr key={a.uri}>
+        <td style={{padding:'6px 8px'}}>
+          <div style={{fontWeight:600,color:'var(--t1)'}}>{a.label}</div>
+          <div style={{color:'var(--t3)',fontSize:10}}>{a.actor||'—'}
+            {a.source?' · the delayed process':a.drivenBy?` · after ${a.drivenBy}`:''}
+            {a.mode&&a.mode!=='moved'?' · start kept, finish extended':''}</div>
+        </td>
+        <td style={{fontFamily:'var(--mono)',whiteSpace:'nowrap',padding:'6px 8px'}}>{fd(a.oldEnd,false)} → <b>{fd(a.newEnd)}</b></td>
+        <td style={{textAlign:'right',padding:'6px 8px',whiteSpace:'nowrap'}}>
+          <div style={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:600}}>+{a.shiftDays} d</div>
+          {a.absorbedDays>0&&<div style={{fontSize:10,color:'var(--green)'}}>{a.absorbedDays} d absorbed by float</div>}
+        </td>
+      </tr>))}</tbody>
+  </table>;
+}
+
+function ImpactResult({r,showSource=true}){
+  const [more,setMore]=useState(false);
   if(!r)return null;
   const pe=r.projectEnd;
+  const rows=r.affected.filter(a=>showSource||!a.source);
   return(
     <div style={{marginTop:8,fontSize:11}}>
       <div style={{padding:'8px 10px',borderRadius:'var(--r)',background:pe.shiftDays>0?'var(--red2)':'var(--amber2)',
-                   color:pe.shiftDays>0?'var(--red)':'var(--amber)',fontWeight:600,marginBottom:6}}>
-        {r.affectedCount} later process{r.affectedCount!==1?'es':''} shift · {r.actorsToInform.length} actor{r.actorsToInform.length!==1?'s':''} affected ·{' '}
-        {pe.shiftDays>0?`completion moves +${pe.shiftDays} d (${pe.old} → ${pe.new})`:'completion date unchanged'}
-        {r.absorbedByFloat.length>0&&<span style={{fontWeight:400}}> · {r.absorbedByFloat.length} absorbed by float</span>}
+                   color:pe.shiftDays>0?'var(--red)':'var(--amber)',fontWeight:600,marginBottom:6,lineHeight:1.5}}>
+        {r.affectedCount} later process{r.affectedCount!==1?'es':''} would move · {r.actorsToInform.length} {r.actorsToInform.length!==1?'people':'person'} to inform<br/>
+        {pe.shiftDays>0?`Completion: ${fd(pe.old)} → ${fd(pe.new)} (+${pe.shiftDays} d)`:`Completion date unchanged (${fd(pe.old)})`}
       </div>
-      {r.affected.filter(a=>!a.source).map(a=>(
-        <div key={a.uri} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'3px 0',borderBottom:'1px solid var(--b1)'}}>
-          <span>{a.label}<span style={{color:'var(--t3)'}}> · {a.actor||'—'}</span></span>
-          <span style={{fontFamily:'var(--mono)',color:'var(--red)',whiteSpace:'nowrap'}}>+{a.shiftDays} d → {a.newEnd}</span>
-        </div>
-      ))}
-      {r.actorsToInform.length>0&&<div style={{marginTop:6,color:'var(--t2)'}}>
-        <b>Inform:</b> {r.actorsToInform.map(x=>`${x.actor}${x.organisation?` (${x.organisation})`:''} from ${x.firstAffectedStart}`).join(' · ')}
-      </div>}
-      <div style={{marginTop:4,fontSize:10,color:'var(--t3)'}}>{r.assumptions}</div>
+      <div style={{color:'var(--t3)',fontSize:10,marginBottom:4}}>A later process moves by less than the delay when there was spare time (float) before it.</div>
+      <ImpactRows rows={rows}/>
+      <div style={{marginTop:6}}>
+        <span style={{cursor:'pointer',color:'var(--cyan)',fontSize:10}} onClick={()=>setMore(m=>!m)}>{more?'▾ hide':'▸ show'} who to inform and assumptions</span>
+        {more&&<div style={{marginTop:4}}>
+          {r.actorsToInform.map(x=>(
+            <div key={x.actor} style={{padding:'3px 0',borderBottom:'1px solid var(--b1)'}}>
+              <b>{x.actor}</b>{x.organisation?` (${x.organisation})`:''}: {x.processes} process{x.processes!==1?'es':''}, first <i>{x.firstProcess}</i> — start {fd(x.firstAffectedStart,false)} → {fd(x.firstNewStart)}
+            </div>))}
+          {r.absorbedByFloat?.length>0&&<div style={{marginTop:4,color:'var(--green)'}}>Not affected (float absorbs the delay): {r.absorbedByFloat.map(x=>x.label).join(' · ')}</div>}
+          <div style={{marginTop:4,fontSize:10,color:'var(--t3)'}}>Assumptions: {r.assumptions}.</div>
+        </div>}
+      </div>
     </div>
   );
 }
@@ -709,18 +806,19 @@ function DelayImpact({projId,proc,onMutate}){
   const [res,setRes]=useState(null);
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState('');
+  const [msg,setMsg]=useState('');
   const done=proc.status?.isFinished||proc.status?.isCancelled;
-  useEffect(()=>{setRes(null);setErr('')},[proc.id]);
+  useEffect(()=>{setRes(null);setErr('');setMsg('')},[proc.id]);
   if(done||!proc.schedule)return null;
   async function call(apply){
-    if(apply&&!confirm(`Re-plan: write new schedule versions for ${proc.label} and ${res?.affectedCount||0} later process(es)? The baseline is kept.`))return;
-    setBusy(true);setErr('');
+    if(apply&&!confirm(`Record this as the new plan? ${proc.label} and ${res?.affectedCount||0} later process(es) get new planned dates. The original (baseline) dates are kept.`))return;
+    setBusy(true);setErr('');setMsg('');
     const r=await fetch(API(`/api/projects/${projId}/impact${apply?'/apply':''}`),{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({process:proc.id,delayDays:Number(days),by:apply?'Site Manager':undefined})});
     const d=await r.json();setBusy(false);
     if(!r.ok){setErr(d.detail||'Failed');return}
     setRes(d);
-    if(apply){setRes(null);onMutate&&onMutate()}
+    if(apply){setRes(null);setMsg(`Re-plan recorded: ${d.written} processes have new planned dates. See "vs baseline" on the board.`);onMutate&&onMutate()}
   }
   return(
     <div className="sp-section">
@@ -728,90 +826,144 @@ function DelayImpact({projId,proc,onMutate}){
       <div style={{display:'flex',gap:6,alignItems:'center',fontSize:11,flexWrap:'wrap'}}>
         If this finishes
         <input className="form-input" type="number" min="1" value={days} onChange={e=>{setDays(e.target.value);setRes(null)}} style={{width:64,padding:'3px 6px'}}/>
-        days late:
+        days later than planned ({fd(proc.schedule.endedAtTime)}):
         <button className="btn btn-p btn-xs" onClick={()=>call(false)} disabled={busy||!(days>0)}>{busy?'…':'Show impact'}</button>
-        {res&&res.affectedCount>=0&&<button className="btn btn-r btn-xs" onClick={()=>call(true)} disabled={busy}>Apply re-plan</button>}
+        {res&&res.affectedCount>=0&&<button className="btn btn-r btn-xs" onClick={()=>call(true)} disabled={busy}>Record as new plan</button>}
       </div>
       {err&&<div className="err" style={{marginTop:6}}>{err}</div>}
+      {msg&&<div style={{marginTop:6,color:'var(--green)',fontSize:11}}>{msg}</div>}
       <ImpactResult r={res}/>
     </div>
   );
 }
 
 // ── Delay watch: late processes at a reference date and their knock-on effect ─
-function DelayWatch({projId,globalTick}){
-  const [ref,setRef]=useState('');
+function DelayWatch({projId,globalTick,onMutate,statusDate,setStatusDate}){
+  const ref=statusDate||'', setRef=setStatusDate;
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState('');
+  const [more,setMore]=useState(false);
   const url=API(`/api/projects/${projId}/delays${ref?`?date=${ref}`:''}`);
   const {data,loading}=useFetch(url,[projId,globalTick,ref]);
   if(loading&&!data)return <Loading/>;
   if(!data)return null;
+  const pe=data.projectEnd;
+  const lateIds=new Set(data.late.map(x=>x.id));
+  const lateInfo=Object.fromEntries(data.late.map(x=>[x.id,x]));
+  async function apply(){
+    if(!confirm(`Record the forecast as the new plan? ${data.affected.length} processes get new planned dates; the baseline is kept.`))return;
+    setBusy(true);
+    const r=await fetch(API(`/api/projects/${projId}/delays/apply?date=${data.referenceDate}`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({by:'Site Manager'})});
+    const d=await r.json();setBusy(false);
+    setMsg(r.ok?`Recorded: ${d.written} processes re-planned. Their slip is now shown on the board and in the completion date.`:(d.detail||'Failed'));
+    onMutate&&onMutate();
+  }
   return(
     <div>
-      <div style={{marginBottom:14,display:'flex',justifyContent:'space-between',alignItems:'flex-end',gap:12,flexWrap:'wrap'}}>
+      <div style={{marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'flex-end',gap:12,flexWrap:'wrap'}}>
         <div>
           <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>Delay Watch</div>
-          <div style={{fontSize:11,color:'var(--t3)',maxWidth:640}}>
-            Processes that are late at the reference date, and how their delay propagates along <span style={{fontFamily:'var(--mono)'}}>ioc:hasPredecessor</span> to
-            later processes, the people responsible for them, and the completion date.
-          </div>
+          <div style={{fontSize:11,color:'var(--t3)',maxWidth:640}}>What is late on the chosen date, and what it does to later work and to the completion date.</div>
         </div>
-        <label style={{fontSize:11,color:'var(--t2)',display:'flex',gap:6,alignItems:'center'}}>Reference date
-          <input className="form-input" type="date" value={ref||data.referenceDate} onChange={e=>setRef(e.target.value)} style={{width:150}}/>
+        <label style={{fontSize:11,color:'var(--t2)',display:'flex',gap:6,alignItems:'center'}}>Status date
+          <input className="form-input" type="date" value={ref||data.referenceDate} onChange={e=>{setRef(e.target.value);setMsg('')}} style={{width:150}}/>
         </label>
       </div>
-      <div className="stats" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:14}}>
-        {[{l:'Late now',v:data.late.length,c:'var(--amber)'},{l:'Knock-on processes',v:data.affectedCount,c:'var(--red)'},
-          {l:'Actors to inform',v:data.actorsToInform.length,c:'var(--blue)'},
-          {l:'Completion',v:data.projectEnd.shiftDays>0?`+${data.projectEnd.shiftDays} d`:'on time',c:data.projectEnd.shiftDays>0?'var(--red)':'var(--green)'}].map(s=>(
-          <div key={s.l} className="card" style={{padding:14,marginBottom:0}}>
-            <div className="stat-lbl">{s.l}</div><div className="stat-val" style={{color:s.c}}>{s.v}</div>
-          </div>))}
+
+      <div className="card" style={{padding:'14px 16px',fontSize:13,lineHeight:1.6,borderColor:pe.shiftDays>0?'rgba(239,68,68,.35)':'var(--b1)'}}>
+        {data.late.length===0
+          ?<>On <b>{fd(data.referenceDate)}</b> nothing is late. Completion stays <b>{fd(pe.old)}</b>.</>
+          :<>On <b>{fd(data.referenceDate)}</b>, <b>{data.late.length} process{data.late.length!==1?'es are':' is'} late</b>.
+            If they are not recovered, <b>{data.affectedCount}</b> later process{data.affectedCount!==1?'es':''} move and{' '}
+            {pe.shiftDays>0
+              ?<span style={{color:'var(--red)'}}>completion moves from <b>{fd(pe.old)}</b> to <b>{fd(pe.new)}</b> (+{pe.shiftDays} d).</span>
+              :<span style={{color:'var(--green)'}}>the completion date <b>{fd(pe.old)}</b> is not affected (enough float).</span>}</>}
+        {pe.baseline&&pe.baseline!==pe.old&&<div style={{fontSize:11,color:'var(--t3)'}}>Baseline completion was {fd(pe.baseline)}; the current plan already includes recorded re-plans.</div>}
+        {data.affected.length>0&&<div style={{marginTop:8,display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+          <button className="btn btn-r btn-sm" onClick={apply} disabled={busy}>{busy?'…':'Record forecast as new plan'}</button>
+          <span style={{fontSize:10,color:'var(--t3)'}}>keeps the delay visible on the board and in the completion date; the baseline is kept</span>
+        </div>}
+        {msg&&<div style={{marginTop:6,color:'var(--green)',fontSize:11}}>{msg}</div>}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-        <div className="card"><div className="card-head"><div className="card-title">Late at {data.referenceDate}</div></div>
-          <div className="card-body" style={{fontSize:11}}>
-            {data.late.length===0?<div className="ont-empty">Nothing is late.</div>:data.late.map(x=>(
-              <div key={x.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'4px 0',borderBottom:'1px solid var(--b1)'}}>
-                <span>{x.label}<span style={{color:'var(--t3)'}}> · {x.actor||'—'} · {x.reason}</span></span>
-                <span style={{fontFamily:'var(--mono)',color:'var(--amber)',whiteSpace:'nowrap'}}>≥ {x.minDelayDays} d</span>
-              </div>))}
-          </div></div>
-        <div className="card"><div className="card-head"><div className="card-title">Knock-on effect</div></div>
-          <div className="card-body"><ImpactResult r={data}/></div></div>
+
+      {data.affected.length>0&&<div className="card">
+        <div className="card-head"><div className="card-title">Late now and knock-on</div><span style={{fontSize:10,color:'var(--t3)'}}>{data.late.length} late · {data.affectedCount} knock-on</span></div>
+        <table className="tbl" style={{fontSize:11}}>
+          <thead><tr><th></th><th>Process · responsible</th><th>Why</th><th>Finish: planned → forecast</th><th style={{textAlign:'right'}}>Shift</th></tr></thead>
+          <tbody>{data.affected.map(a=>{const L=lateInfo[a.id];return(
+            <tr key={a.uri}>
+              <td><span className="badge" style={{background:L?'var(--amber2)':'var(--red2)',color:L?'var(--amber)':'var(--red)'}}>{L?'late':'knock-on'}</span></td>
+              <td><div style={{fontWeight:600}}>{a.label}</div><div style={{color:'var(--t3)',fontSize:10}}>{a.actor||'—'}</div></td>
+              <td style={{color:'var(--t2)',fontSize:10}}>{L?(L.reason==='planned end passed'?`should have finished ${fd(L.plannedEnd,false)}`:`should have started ${fd(L.plannedStart,false)}`):`after ${a.drivenBy}`}
+                {a.absorbedDays>0&&<div style={{color:'var(--green)'}}>{a.absorbedDays} d absorbed by float</div>}</td>
+              <td style={{fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{fd(a.oldEnd,false)} → <b>{fd(a.newEnd)}</b></td>
+              <td style={{textAlign:'right',fontFamily:'var(--mono)',color:'var(--red)',fontWeight:600}}>+{a.shiftDays} d</td>
+            </tr>)})}</tbody>
+        </table>
+      </div>}
+
+      <div style={{fontSize:11}}>
+        <span style={{cursor:'pointer',color:'var(--cyan)'}} onClick={()=>setMore(m=>!m)}>{more?'▾ hide':'▸ show'} who to inform, how "late" is defined, assumptions</span>
+        {more&&<div className="card" style={{marginTop:8}}><div className="card-body">
+          {data.actorsToInform.map(x=>(
+            <div key={x.actor} style={{padding:'3px 0',borderBottom:'1px solid var(--b1)'}}>
+              <b>{x.actor}</b>{x.organisation?` (${x.organisation})`:''}: {x.processes} process{x.processes!==1?'es':''}, first <i>{x.firstProcess}</i> — start {fd(x.firstAffectedStart,false)} → {fd(x.firstNewStart)}
+            </div>))}
+          <div style={{marginTop:8,color:'var(--t3)',fontSize:10}}>
+            Late = not finished and the planned finish is before the status date, or not started and the planned start is before the status date.
+            A late process cannot finish before the status date, so its delay is at least the days already passed. Assumptions: {data.assumptions}.
+          </div>
+        </div></div>}
       </div>
     </div>
   );
 }
 
-// ── Status history (IoC ProcessDataState versioning) ───────────────────────
+// ── Planned vs actual + status history (IoC ProcessDataState versioning) ───
 function StatusHistory({projId,procId,tick}){
   const {data}=useFetch(API(`/api/projects/${projId}/processes/${procId}/history`),[projId,procId,tick]);
   const [open,setOpen]=useState(false);
   if(!data?.versions)return null;
-  const v=data.versions, sv=data.scheduleVersions||[];
+  const v=data.versions, sv=data.scheduleVersions||[], c=data.comparison||{};
+  const cell={padding:'5px 6px',borderBottom:'1px solid var(--b1)',fontFamily:'var(--mono)',fontSize:10};
+  const varC=n=>n>0?'var(--red)':n<0?'var(--green)':'var(--t2)';
   return(
     <div className="sp-section">
-      <div className="sp-head" style={{cursor:'pointer'}} onClick={()=>setOpen(o=>!o)}>
-        History · {v.length} status state{v.length!==1?'s':''}{sv.length>1?` · ${sv.length} schedule states`:''} {open?'▾':'▸'}
+      <div className="sp-head">Planned vs actual</div>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr>{['','Baseline','Current plan','Actual','Variance'].map(h=><th key={h} style={{...cell,color:'var(--t3)',textAlign:'left',fontFamily:'var(--sans)'}}>{h}</th>)}</tr></thead>
+        <tbody>
+          <tr><td style={{...cell,fontFamily:'var(--sans)',color:'var(--t3)'}}>Start</td><td style={cell}>{fd(c.baselineStart)}</td><td style={cell}>{fd(c.plannedStart)}</td>
+            <td style={cell}>{c.actualStart?fd(c.actualStart):<span style={{color:'var(--t3)'}}>{data.versions.some(x=>x.status?.isStarted)?'not recorded':'not started'}</span>}</td>
+            <td style={{...cell,color:varC(c.startVarianceDays)}}>{c.startVarianceDays!=null?sd(c.startVarianceDays):''}</td></tr>
+          <tr><td style={{...cell,fontFamily:'var(--sans)',color:'var(--t3)'}}>Finish</td><td style={cell}>{fd(c.baselineEnd)}</td><td style={cell}>{fd(c.plannedEnd)}</td>
+            <td style={cell}>{c.actualEnd?fd(c.actualEnd):<span style={{color:'var(--t3)'}}>{c.status==='Finished'?'not recorded':'open'}</span>}</td>
+            <td style={{...cell,color:varC(c.finishVarianceDays)}}>{c.finishVarianceDays!=null?`${sd(c.finishVarianceDays)}${c.finishBasis==='current plan'?' (plan)':''}`:''}</td></tr>
+        </tbody>
+      </table>
+      <div style={{fontSize:10,color:'var(--t3)',marginTop:4}}>Variance = actual (or current plan, while open) minus baseline. Imported processes have no recorded actual dates unless the source has them (MS Project).</div>
+
+      <div className="sp-head" style={{cursor:'pointer',marginTop:12}} onClick={()=>setOpen(o=>!o)}>
+        History · {v.length} status change{v.length!==1?'s':''} · {sv.length} schedule version{sv.length!==1?'s':''} {open?'▾':'▸'}
       </div>
-      {open&&v.map(s=>(
-        <div key={s.pds} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:'1px solid var(--b1)',fontSize:10,opacity:s.current?1:.65}}>
-          <span style={{fontFamily:'var(--mono)',color:'var(--t3)'}}>{(s.generatedAtTime||'').replace('T',' ').slice(0,19)}</span>
-          <span style={{display:'flex',gap:6,alignItems:'center'}}>
-            {s.by&&<span style={{color:'var(--t3)'}}>{s.by}</span>}
-            {s.progress!=null&&<span style={{fontFamily:'var(--mono)'}}>{s.progress}%</span>}
-            {s.status&&<Badge status={s.status}/>}
-            {s.current&&<span style={{color:'var(--cyan)',fontFamily:'var(--mono)'}}>current</span>}
-          </span>
-        </div>
-      ))}
-      {open&&sv.length>1&&sv.map(s=>(
-        <div key={s.pds} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid var(--b1)',fontSize:10,opacity:s.current?1:.65}}>
-          <span style={{fontFamily:'var(--mono)',color:'var(--t3)'}}>{(s.generatedAtTime||'').replace('T',' ').slice(0,19)}</span>
-          <span style={{fontFamily:'var(--mono)'}}>schedule {s.start} → {s.end}{s.by?` · ${s.by}`:''}{s.current?' · current':''}</span>
-        </div>
-      ))}
-      {open&&<div style={{fontSize:10,color:'var(--t3)',marginTop:6}}>Earlier states are kept as ioc:ProcessDataState with prov:invalidatedAtTime.</div>}
+      {open&&<table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr>{['Happened','Recorded','Change','By'].map(h=><th key={h} style={{...cell,color:'var(--t3)',textAlign:'left',fontFamily:'var(--sans)'}}>{h}</th>)}</tr></thead>
+        <tbody>
+          {[...v.map(x=>({...x,t:x.generatedAtTime})),...sv.map(x=>({...x,t:x.generatedAtTime}))].sort((a,b)=>b.t.localeCompare(a.t)).map(s=>(
+            <tr key={s.pds} style={{opacity:s.current?1:.7}}>
+              <td style={cell}>{s.kind==='status'?(s.effectiveDate?fd(s.effectiveDate):'—'):''}</td>
+              <td style={cell}>{(s.generatedAtTime||'').replace('T',' ').slice(0,16)}</td>
+              <td style={{...cell,fontFamily:'var(--sans)'}}>
+                {s.kind==='status'
+                  ?<span style={{display:'inline-flex',gap:5,alignItems:'center'}}><Badge status={s.status}/>{s.progress!=null&&<span style={{fontFamily:'var(--mono)'}}>{s.progress}%</span>}</span>
+                  :<span>plan {fd(s.start,false)} → {fd(s.end)}</span>}
+                {s.current&&<span style={{color:'var(--cyan)',marginLeft:5,fontFamily:'var(--mono)'}}>current</span>}
+              </td>
+              <td style={{...cell,color:'var(--t3)',fontFamily:'var(--sans)'}}>{s.by||'—'}</td>
+            </tr>))}
+        </tbody>
+      </table>}
+      {open&&<div style={{fontSize:10,color:'var(--t3)',marginTop:6}}>"Happened" = date entered with the change (ext:effectiveDate); "Recorded" = prov:generatedAtTime. Earlier states are kept as ioc:ProcessDataState with prov:invalidatedAtTime, so all of this is in the RDF export.</div>}
     </div>
   );
 }
@@ -1126,13 +1278,43 @@ function GanttTimeline({projId,globalTick}){
 }
 
 // ── SPARQL ─────────────────────────────────────────────────────────────────
+// Presets are parameterised (v3.1): actor / process / date / phase are chosen from drop-down
+// lists filled from the project data; the server inserts the value into the query. The query
+// text stays visible and can still be edited (then it runs as a custom query).
+function ParamField({spec,value,onChange,options}){
+  if(spec.type==='date')
+    return <input className="form-input" type="date" value={value||''} onChange={e=>onChange(e.target.value)} style={{width:150}}/>;
+  const list=options?.[spec.type]||[];
+  if(!list.length&&spec.type==='phase')
+    return <span style={{fontSize:11,color:'var(--amber)'}}>This project has no phases (e.g. a CSV import)</span>;
+  return <select className="form-select" value={value||''} onChange={e=>onChange(e.target.value)} style={{minWidth:220,maxWidth:380}}>
+    {spec.optional&&<option value="">(all)</option>}
+    {list.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+  </select>;
+}
+
+function defaultParams(preset,options){
+  const out={};
+  (preset.params||[]).forEach(sp=>{
+    if(sp.type==='date'){out[sp.name]=sp.default;return}
+    const list=options?.[sp.type]||[];
+    const hit=list.find(o=>o.value===sp.default||o.name===sp.default);
+    out[sp.name]=hit?hit.value:(sp.optional?'':(list[0]?.value||''));
+  });
+  return out;
+}
+
 function SPARQLTab({projId,globalTick}){
   const {data:presets}=useFetch(API('/api/sparql/presets'));
+  const {data:options}=useFetch(API(`/api/projects/${projId}/sparql/options`),[projId,globalTick]);
   const [query,setQuery]=useState('');
   const [results,setResults]=useState(null);
   const [running,setRunning]=useState(false);
   const [error,setError]=useState('');
   const [activePreset,setActivePreset]=useState(null);
+  const [params,setParams]=useState({});
+  const [edited,setEdited]=useState(false);
+  const [showQuery,setShowQuery]=useState(false);
 
   const categories=useMemo(()=>{
     if(!presets?.presets)return{};
@@ -1140,12 +1322,31 @@ function SPARQLTab({projId,globalTick}){
     presets.presets.forEach(p=>{cats[p.category]=cats[p.category]||[];cats[p.category].push(p);});
     return cats;
   },[presets]);
+  const preset=presets?.presets?.find(p=>p.id===activePreset);
+
+  async function runPreset(id,prm){
+    setRunning(true);setError('');setResults(null);
+    const r=await fetch(API(`/api/projects/${projId}/presets/${id}/run`),{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({params:prm})});
+    const d=await r.json();setRunning(false);
+    if(!r.ok){setError(d.detail||'Failed');return}
+    setQuery(d.query);setEdited(false);setParams(d.params||prm);
+    if(!d.success)setError(d.error||'Query failed');else setResults(d);
+  }
 
   function loadPreset(p){
-    setQuery(p.query);setActivePreset(p.id);setResults(null);setError('');
+    const prm=defaultParams(p,options);
+    setActivePreset(p.id);setParams(prm);setResults(null);setError('');
+    runPreset(p.id,prm);
+  }
+
+  function changeParam(name,val){
+    const prm={...params,[name]:val};setParams(prm);
+    runPreset(activePreset,prm);
   }
 
   async function runQuery(){
+    if(activePreset&&!edited)return runPreset(activePreset,params);
     if(!query.trim())return;
     setRunning(true);setError('');setResults(null);
     const r=await fetch(API(`/api/projects/${projId}/sparql`),{
@@ -1158,10 +1359,9 @@ function SPARQLTab({projId,globalTick}){
   }
 
   return(
-    <div style={{display:'grid',gridTemplateColumns:'240px 1fr',gap:14,height:'calc(100vh - 120px)'}}>
-      {/* Preset list */}
+    <div style={{display:'grid',gridTemplateColumns:'250px 1fr',gap:14,height:'calc(100vh - 120px)'}}>
       <div style={{overflow:'hidden',display:'flex',flexDirection:'column'}}>
-        <div style={{fontWeight:700,fontSize:13,marginBottom:10,color:'var(--t1)'}}>Query Library</div>
+        <div style={{fontWeight:700,fontSize:13,marginBottom:10,color:'var(--t1)'}}>Questions (query library)</div>
         <div className="qlist">
           {Object.entries(categories).map(([cat,qs])=>(
             <div key={cat}>
@@ -1169,7 +1369,8 @@ function SPARQLTab({projId,globalTick}){
               {qs.map(q=>(
                 <div key={q.id} className={`qitem ${activePreset===q.id?'active':''}`} onClick={()=>loadPreset(q)}>
                   <div className="qitem-title">{q.title}</div>
-                  <div className="qitem-cat">{q.id}{q.fr&&<span style={{color:'var(--cyan)',marginLeft:6}}>{q.fr}</span>}</div>
+                  <div className="qitem-cat">{q.id}{q.fr&&<span style={{color:'var(--cyan)',marginLeft:6}}>{q.fr}</span>}
+                    {q.params?.length>0&&<span style={{marginLeft:6}}>· choose {q.params.map(x=>x.label.toLowerCase()).join(', ')}</span>}</div>
                 </div>
               ))}
             </div>
@@ -1177,38 +1378,46 @@ function SPARQLTab({projId,globalTick}){
         </div>
       </div>
 
-      {/* Editor + results */}
       <div style={{display:'flex',flexDirection:'column',gap:12,overflow:'hidden'}}>
-        <div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-            <div style={{fontWeight:700,fontSize:13}}>
-              SPARQL Query
-              {activePreset&&presets?.presets?.find(p=>p.id===activePreset)&&(
-                <span style={{fontWeight:400,fontSize:11,color:'var(--t3)',marginLeft:8}}>
-                  — {presets.presets.find(p=>p.id===activePreset).description}
-                </span>
-              )}
+        <div className="card" style={{marginBottom:0}}>
+          <div className="card-body" style={{padding:'12px 14px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:13}}>{preset?preset.title:'Custom SPARQL query'}</div>
+                {preset&&<div style={{fontSize:11,color:'var(--t3)'}}>{preset.description}</div>}
+              </div>
+              <button className="btn btn-p btn-sm" onClick={runQuery} disabled={running}>
+                {running?<><div className="spin" style={{width:12,height:12}}/>Running…</>:'▶ Run'}
+              </button>
             </div>
-            <button className="btn btn-p btn-sm" onClick={runQuery} disabled={running}>
-              {running?<><div className="spin" style={{width:12,height:12}}/>Running…</>:'▶ Run'}
-            </button>
+            {preset?.params?.length>0&&!edited&&(
+              <div style={{display:'flex',gap:14,flexWrap:'wrap',marginTop:10,alignItems:'center'}}>
+                {preset.params.map(sp=>(
+                  <label key={sp.name} style={{display:'flex',gap:6,alignItems:'center',fontSize:11,color:'var(--t2)'}}>
+                    {sp.label}
+                    <ParamField spec={sp} value={params[sp.name]} options={options} onChange={v=>changeParam(sp.name,v)}/>
+                  </label>))}
+              </div>)}
+            {edited&&preset&&<div style={{fontSize:11,color:'var(--amber)',marginTop:8}}>Query edited by hand — runs as a custom query.
+              <span style={{color:'var(--cyan)',cursor:'pointer',marginLeft:6}} onClick={()=>runPreset(activePreset,params)}>reset to preset</span></div>}
+            <div style={{marginTop:10}}>
+              <span style={{fontSize:10,color:'var(--cyan)',cursor:'pointer'}} onClick={()=>setShowQuery(x=>!x)}>{showQuery||!preset?'▾':'▸'} SPARQL text</span>
+              {(showQuery||!preset)&&<textarea className="qeditor" style={{marginTop:6}} value={query} onChange={e=>{setQuery(e.target.value);setEdited(true)}}
+                    placeholder="SELECT ?process ?label WHERE {&#10;  ?process a ioc:Process .&#10;  ?process rdfs:label ?label .&#10;}"/>}
+            </div>
           </div>
-          <textarea className="qeditor" value={query} onChange={e=>setQuery(e.target.value)}
-                    placeholder="SELECT ?process ?label WHERE {&#10;  ?process a ioc:Process .&#10;  ?process rdfs:label ?label .&#10;}"/>
         </div>
 
         {error&&<div className="err">{error}</div>}
 
         {results&&(
           <div style={{flex:1,overflow:'auto'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <div style={{fontSize:12,color:'var(--t2)',fontFamily:'var(--mono)'}}>
-                {results.count} result{results.count!==1?'s':''}
-              </div>
+            <div style={{fontSize:12,color:'var(--t2)',fontFamily:'var(--mono)',marginBottom:8}}>
+              {results.count} result{results.count!==1?'s':''}
             </div>
             <div style={{overflow:'auto',background:'var(--bg)',border:'1px solid var(--b1)',borderRadius:'var(--r)'}}>
               {results.count===0
-                ?<div className="empty" style={{height:80}}>No results</div>
+                ?<div className="empty" style={{height:80}}>No results{preset?.id==='q17'&&!(options?.phase?.length)?' — this project has no phases':''}</div>
                 :<table className="qtable">
                   <thead><tr>{results.variables.map(v=><th key={v}>{v}</th>)}</tr></thead>
                   <tbody>
@@ -1228,7 +1437,7 @@ function SPARQLTab({projId,globalTick}){
 
         {!results&&!error&&!running&&(
           <div className="empty" style={{background:'var(--s2)',borderRadius:'var(--r2)',border:'1px solid var(--b1)'}}>
-            Select a preset or write a query, then click Run
+            Pick a question on the left, or write a query
           </div>
         )}
       </div>
@@ -1485,6 +1694,7 @@ function App(){
   // delete). Every view includes this in its useFetch deps, so all active
   // fetches re-run simultaneously — no manual "navigate away and back" needed.
   const [globalTick,setGlobalTick]=useState(0);
+  const [statusDate,setStatusDate]=useState('');   // shared by Delay Watch and the board's completion forecast
   const [syncFlash,setSyncFlash]=useState(false);
 
   const onMutate=useCallback(()=>{
@@ -1496,7 +1706,7 @@ function App(){
   // ─────────────────────────────────────────────────────────────────────────
 
   function openProject(id,name){
-    setProjId(id);setProjName(name);setView('board');
+    setProjId(id);setProjName(name);setView('board');setStatusDate('');
   }
 
   function switchView(v){
@@ -1565,8 +1775,8 @@ function App(){
         </div>
         <div className="content">
           {view==='projects'&&<Projects onOpen={openProject}/>}
-          {view==='board'   &&projId&&<ProcessBoard projId={projId} projName={projName} globalTick={globalTick} onMutate={onMutate}/>}
-          {view==='delays'  &&projId&&<DelayWatch projId={projId} globalTick={globalTick}/>}
+          {view==='board'   &&projId&&<ProcessBoard projId={projId} projName={projName} globalTick={globalTick} onMutate={onMutate} statusDate={statusDate}/>}
+          {view==='delays'  &&projId&&<DelayWatch projId={projId} globalTick={globalTick} onMutate={onMutate} statusDate={statusDate} setStatusDate={setStatusDate}/>}
           {view==='gantt'   &&projId&&<GanttTimeline projId={projId} globalTick={globalTick}/>}
           {view==='deps'    &&projId&&<DependencyGraph projId={projId} projName={projName} globalTick={globalTick}/>}
           {view==='sparql'  &&projId&&<SPARQLTab projId={projId} globalTick={globalTick}/>}

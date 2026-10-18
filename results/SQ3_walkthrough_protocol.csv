@@ -1,14 +1,14 @@
 FR,requirement,route (view / preset / custom SPARQL / not answerable),view or preset used,interaction steps from process board,notes
-FR4,Unfinished processes of Maria Okonkwo,,q01,,
+FR4,Unfinished processes of Maria Okonkwo,,q01,,v3.1: value chosen from drop-down (preset parameter)
 FR5,Processes that can start next,,q05,,
 FR6,Blocked processes and blockers,,q06,,
-FR7,Transitive successors of 'Drainage — Below Ground Foul & Surface Water',,q07,,
-FR8,Prerequisites of 'Structural Screed Topping — Floors 1-3' finished?,,q08,,
-FR9,Overdue on 2025-10-01,,q10,,
-FR10,Materials for processes starting Sep–Oct 2025,,q13,,
-FR11,Status history of 'Thermal & Acoustic Insulation — Floors & Partitions',,q18,,
+FR7,Transitive successors of 'Drainage — Below Ground Foul & Surface Water',,q07,,v3.1: value chosen from drop-down (preset parameter)
+FR8,Prerequisites of 'Structural Screed Topping — Floors 1-3' finished?,,q08,,v3.1: value chosen from drop-down (preset parameter)
+FR9,Overdue on 2025-10-01,,q10,,v3.1: value chosen from drop-down (preset parameter)
+FR10,Materials for processes starting Sep–Oct 2025,,q13,,v3.1: value chosen from drop-down (preset parameter)
+FR11,Status history of 'Thermal & Acoustic Insulation — Floors & Partitions',,q18,,v3.1: value chosen from drop-down (preset parameter)
 FR12,Processes per location,,q16,,
-FR13,Completion per project / phase / actor,,q04,,
+FR13,"Completion: (a) project, (b) per phase, (c) per actor",,"Process Board: progress card (per phase / per actor); presets q04, q17",,
 FR14,Impact if '1st Fix Plumbing — Pipework & Waste' is 21 days late,,API /impact,,
 FR15,Late processes on 2025-10-01 and their knock-on effect,,API /delays,,
 FR16,Record a status change of 'Thermal & Acoustic Insulation — Floors & Partitions' as a new version,,process panel / API status,,

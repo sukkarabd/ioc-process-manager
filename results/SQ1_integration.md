@@ -10,7 +10,7 @@
 | resources | 52 | 52 | 52 |
 | materials | 81 | 81 | 81 |
 | locations | 16 | 16 | 0 |
-| triples | 2813 | 2867 | 2217 |
+| triples | 2813 | 2867 | 2270 |
 | TBox violations | 0 | 0 | 0 |
 | Missing target fields | parent | – | method, output_elements, space |
 

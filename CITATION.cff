@@ -6,8 +6,8 @@ authors:
   - family-names: Souccar
     given-names: Abdullah
     affiliation: "RWTH Aachen University, Chair of Individualized Production"
-version: "3.0.0"
-date-released: "2026-10-11"
+version: "3.1.0"
+date-released: "2026-10-12"
 license: MIT
 keywords:
   - construction scheduling
